@@ -24,7 +24,7 @@ const fontCss = `@font-face{font-family:"JetBrains Mono";font-weight:400;src:url
   const when = process.env.PREVIEW_DATE ? new Date(process.env.PREVIEW_DATE + 'T12:00:00-05:00') : new Date(Date.now() + 14 * 864e5);
   await pg.clock.install({ time: when.getTime() });
   // the halloween edition runs all october; keep it out of the season-long link previews
-  await pg.addInitScript(() => { window.__hw = false; });
+  await pg.addInitScript(() => { window.__hw = false; window.__xm = false; });
   await pg.goto(`https://heyalex.dev/og-card?p=${phase}`);
   await pg.evaluate(() => document.fonts.ready);
   await pg.clock.runFor(2500); // load handler clicks the preview, sky settles
