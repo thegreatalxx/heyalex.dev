@@ -1,5 +1,6 @@
 // heyalex.dev: one worker serves the page, the live status api, and the link-preview media.
 import HTML from "./index.html";
+import FAVICON_SVG from "./icons/favicon.svg";
 import FAVICON_32 from "./icons/favicon-32.png";
 import TOUCH_ICON from "./icons/apple-touch-icon.png";
 
@@ -206,7 +207,7 @@ export default {
       if (!buf) return new Response("not found", { status: 404 });
       return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=600" } });
     }
-    const icon = { "/favicon-32.png": [FAVICON_32, "image/png"], "/favicon.ico": [FAVICON_32, "image/png"], "/apple-touch-icon.png": [TOUCH_ICON, "image/png"], "/apple-touch-icon-precomposed.png": [TOUCH_ICON, "image/png"] }[p];
+    const icon = { "/favicon.svg": [FAVICON_SVG, "image/svg+xml"], "/favicon-32.png": [FAVICON_32, "image/png"], "/favicon.ico": [FAVICON_32, "image/png"], "/apple-touch-icon.png": [TOUCH_ICON, "image/png"], "/apple-touch-icon-precomposed.png": [TOUCH_ICON, "image/png"] }[p];
     if (icon) return new Response(m === "HEAD" ? null : icon[0], { headers: { "content-type": icon[1], "cache-control": "public, max-age=604800" } });
 
     if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
