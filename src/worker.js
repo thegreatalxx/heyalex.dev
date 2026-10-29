@@ -75,18 +75,20 @@ async function activity(env) {
   const seen = new Map();
   for (const e of await r.json()) {
     const repo = e.repo.name.split("/")[1], owner = e.repo.name.split("/")[0], d = day(e.created_at);
+    // github trims payloads now (no commit lists), so this works from event types and refs only
+    const pl = e.payload || {};
     let kind = null;
     if (e.type === "PushEvent") kind = "push";
-    else if (e.type === "CreateEvent" && e.payload?.ref_type === "repository") kind = "start";
-    else if (e.type === "ReleaseEvent" && e.payload?.action === "published") kind = "release";
+    else if (e.type === "CreateEvent" && (pl.ref_type === "repository" || (pl.ref_type === "branch" && pl.ref === pl.master_branch))) kind = "start";
+    else if (e.type === "ReleaseEvent" && pl.action === "published") kind = "release";
     else if (e.type === "PublicEvent") kind = "public";
-    else if (e.type === "PullRequestEvent" && e.payload?.pull_request?.merged && owner !== env.GH_USER) kind = "merged";
+    else if (e.type === "PullRequestEvent" && pl.action === "opened") kind = "pr";
     if (!kind) continue;
     const key = d + "|" + repo;
     const prev = seen.get(key);
-    const rank = { release: 4, start: 3, public: 3, merged: 2, push: 1 };
-    if (!prev || rank[kind] > rank[prev.kind]) seen.set(key, { day: d, repo, owner, kind, tag: e.payload?.release?.tag_name || null, n: (prev?.n || 0) + (e.payload?.size || 0) });
-    else prev.n += e.payload?.size || 0;
+    const rank = { release: 4, start: 3, public: 3, pr: 2, push: 1 };
+    const desc = kind === "start" && typeof pl.description === "string" ? pl.description.slice(0, 90) : null;
+    if (!prev || rank[kind] > rank[prev.kind]) seen.set(key, { day: d, repo, owner, kind, tag: pl.release?.tag_name || null, desc: desc || prev?.desc || null });
   }
   return [...seen.values()].slice(0, 6);
 }
