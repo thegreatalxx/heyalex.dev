@@ -21,7 +21,12 @@ id = "9ed339e2bddf4fa0a9bce1c8cb863fa9"
 
 [[rules]]
 type = "Text"
-globs = ["**/*.html"]
+globs = ["**/*.html", "**/*.svg"]
+fallthrough = false
+
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
 fallthrough = false
 
 # secrets (set with `npx wrangler secret put NAME`, never committed):

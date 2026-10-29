@@ -20,7 +20,9 @@ const fontCss = `@font-face{font-family:"JetBrains Mono";font-weight:400;src:url
     if (u.includes('open-meteo')) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(api.wx) });
     return r.abort();
   });
-  await pg.clock.install({ time: new Date('2026-11-05T12:00:00-05:00').getTime() });
+  // record two weeks into the season (no holiday tower colours, right leaves/snow). override with PREVIEW_DATE=YYYY-MM-DD
+  const when = process.env.PREVIEW_DATE ? new Date(process.env.PREVIEW_DATE + 'T12:00:00-05:00') : new Date(Date.now() + 14 * 864e5);
+  await pg.clock.install({ time: when.getTime() });
   await pg.goto(`https://heyalex.dev/og-card?p=${phase}`);
   await pg.evaluate(() => document.fonts.ready);
   await pg.clock.runFor(2500); // load handler clicks the preview, sky settles

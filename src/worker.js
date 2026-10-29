@@ -1,5 +1,8 @@
 // heyalex.dev: one worker serves the page, the live status api, and the link-preview media.
 import HTML from "./index.html";
+import FAVICON_SVG from "./icons/favicon.svg";
+import FAVICON_32 from "./icons/favicon-32.png";
+import TOUCH_ICON from "./icons/apple-touch-icon.png";
 
 // the page's inline script is allowed by hash, so editing index.html never needs a manual csp update
 let CSP_PROMISE;
@@ -39,6 +42,13 @@ async function same(a, b) {
   return crypto.subtle.timingSafeEqual(x, y);
 }
 const authed = async (req, env) => !!env.STATUS_TOKEN && same(req.headers.get("authorization") || "", "Bearer " + env.STATUS_TOKEN);
+// media uploads also accept a short-lived token written straight into kv (key "uploadtoken", ttl ≤ 1h),
+// so a scheduled re-record never needs the long-lived STATUS_TOKEN
+const authedUpload = async (req, env) => {
+  if (await authed(req, env)) return true;
+  const t = await env.STATUS.get("uploadtoken");
+  return !!t && t.length >= 32 && same(req.headers.get("authorization") || "", "Bearer " + t);
+};
 
 // upstreams are hit at most once per ttl per edge location, however much traffic the site gets
 async function cached(ctx, key, ttl, fn) {
@@ -125,7 +135,6 @@ function skyPhase(ms) {
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
 const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
 const OG_BODY = '<div class="ogc"><div class="n">alexander wondwossen</div><div class="d">ai tools · apple apps · hardware that talks to agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
-const OG_ICON = '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500&display=block"><style>html,body{margin:0;width:180px;height:180px;background:#07080e;display:grid;place-items:center;font-family:"JetBrains Mono",monospace}b{font-size:112px;font-weight:500;color:#ffb04d;line-height:1;transform:translateY(-6px)}</style></head><body><b>a</b></body></html>';
 const noindex = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" };
 
 export default {
@@ -161,7 +170,7 @@ export default {
     if (p === "/api/game" && m === "GET") return json(await cached(ctx, "game", 3600, game));
     if (p === "/api/log" && m === "GET") return json(await cached(ctx, "log", 600, () => activity(env)));
     if (p.startsWith("/api/asset/") && m === "PUT") {
-      if (!(await authed(req, env))) return json({ error: "unauthorized" }, 401);
+      if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
       if (!/^og-(rise|noon|set|dusk|night)\.(mp4|jpg)$/.test(name)) return json({ error: "bad name" }, 400);
       const body = await req.arrayBuffer();
@@ -172,7 +181,6 @@ export default {
     if (p.startsWith("/api/")) return json({ error: "not found" }, 404);
 
     if (p === "/og-card") return new Response(HTML.replace("</head>", OG_CSS + "</head>").replace("</body>", OG_BODY + "</body>"), { headers: noindex });
-    if (p === "/og-icon") return new Response(OG_ICON, { headers: noindex });
     if (p === "/og.mp4") {
       const buf = await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".mp4", "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
@@ -193,13 +201,14 @@ export default {
       if (!buf) return new Response("not found", { status: 404 });
       return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } });
     }
-    if (p === "/og.jpg" || p === "/apple-touch-icon.png") {
-      const isOg = p === "/og.jpg";
-      let buf = isOg ? await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".jpg", "arrayBuffer") : null;
-      if (!buf) buf = await env.STATUS.get(isOg ? "asset:og.jpg" : "asset:icon.png", "arrayBuffer");
+    if (p === "/og.jpg") {
+      let buf = await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".jpg", "arrayBuffer");
+      if (!buf) buf = await env.STATUS.get("asset:og.jpg", "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
-      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": isOg ? "image/jpeg" : "image/png", "cache-control": isOg ? "public, max-age=600" : "public, max-age=86400" } });
+      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=600" } });
     }
+    const icon = { "/favicon.svg": [FAVICON_SVG, "image/svg+xml"], "/favicon-32.png": [FAVICON_32, "image/png"], "/favicon.ico": [FAVICON_32, "image/png"], "/apple-touch-icon.png": [TOUCH_ICON, "image/png"], "/apple-touch-icon-precomposed.png": [TOUCH_ICON, "image/png"] }[p];
+    if (icon) return new Response(m === "HEAD" ? null : icon[0], { headers: { "content-type": icon[1], "cache-control": "public, max-age=604800" } });
 
     if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
     if (p === "/" || p === "/index.html")
