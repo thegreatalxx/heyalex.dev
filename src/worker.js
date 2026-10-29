@@ -132,6 +132,20 @@ function skyPhase(ms) {
   return "night";
 }
 
+// project pages get real urls (/work/<id>) with their own title, description and canonical, read from the page's project list
+const PROJECTS = [...HTML.matchAll(/\{id:"([^"]+)",n:"([^"]+)",y:"[^"]*",d:"([^"]*)"/g)].map(m => ({ id: m[1], name: m[2], desc: m[3] }));
+const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function projectHTML(pr) {
+  const url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · alexander wondwossen`;
+  return HTML
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pr.desc)}">`)
+    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
+    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(title)}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pr.desc)}">`);
+}
+
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
 const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
 const OG_BODY = '<div class="ogc"><div class="n">alexander wondwossen</div><div class="d">ai tools · apple apps · hardware that talks to agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
@@ -213,8 +227,10 @@ export default {
     if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
     if (p === "/" || p === "/index.html")
       return new Response(m === "HEAD" ? null : HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
+    const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
+    if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
-    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url></urlset>', { headers: { "content-type": "application/xml" } });
+    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(null, { status: 301, headers: { location: "/" } });
   },
