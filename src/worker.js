@@ -77,32 +77,6 @@ async function lastPush(env) {
   return e ? { repo: e.repo.name.split("/")[1], at: Date.parse(e.created_at) } : null;
 }
 
-// "lately": recent public github activity, one line per repo per day, newest first
-async function activity(env) {
-  const r = await fetch(`https://api.github.com/users/${env.GH_USER}/events/public?per_page=100`, { headers: { ...UA, accept: "application/vnd.github+json", ...(env.GH_TOKEN ? { authorization: "Bearer " + env.GH_TOKEN } : {}) } });
-  if (!r.ok) return null;
-  const day = iso => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(iso));
-  const seen = new Map();
-  for (const e of await r.json()) {
-    const repo = e.repo.name.split("/")[1], owner = e.repo.name.split("/")[0], d = day(e.created_at);
-    // github trims payloads now (no commit lists), so this works from event types and refs only
-    const pl = e.payload || {};
-    let kind = null;
-    if (e.type === "PushEvent") kind = "push";
-    else if (e.type === "CreateEvent" && (pl.ref_type === "repository" || (pl.ref_type === "branch" && pl.ref === pl.master_branch))) kind = "start";
-    else if (e.type === "ReleaseEvent" && pl.action === "published") kind = "release";
-    else if (e.type === "PublicEvent") kind = "public";
-    else if (e.type === "PullRequestEvent" && pl.action === "opened") kind = "pr";
-    if (!kind) continue;
-    const key = d + "|" + repo;
-    const prev = seen.get(key);
-    const rank = { release: 4, start: 3, public: 3, pr: 2, push: 1 };
-    const desc = kind === "start" && typeof pl.description === "string" ? pl.description.slice(0, 90) : null;
-    if (!prev || rank[kind] > rank[prev.kind]) seen.set(key, { day: d, repo, owner, kind, tag: pl.release?.tag_name || null, desc: desc || prev?.desc || null });
-  }
-  return [...seen.values()].slice(0, 6);
-}
-
 async function game() {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
   try {
@@ -138,14 +112,14 @@ const PDATA = JSON.parse(HTML.match(/<script type="application\/json" id="projec
 const PROJECTS = PDATA.map(p => ({ id: p.id, name: p.n, desc: p.d }));
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const LIST = PDATA.map(p => `<li data-id="${esc(p.id)}"><div class="row"><a class="n" href="/work/${esc(p.id)}">${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.y)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join("");
-const detailBody = p => `<h2>what it is</h2><p>${esc(p.what)}</p>${p.built ? `<p class="dim">built at the ${esc(p.built)}.</p>` : ""}` +
-  (p.how ? `<h2>how it works</h2><ol>${p.how.map(r => `<li>${esc(r)}</li>`).join("")}</ol>` : "") +
-  (p.broke ? `<h2>what broke</h2><p>${esc(p.broke)}</p>` : "") +
-  (p.next ? `<h2>what's next</h2><p>${esc(p.next)}</p>` : "") +
-  (p.links && p.links.length ? `<h2>links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
+const detailBody = p => `<h2>What it is</h2><p>${esc(p.what)}</p>${p.built ? `<p class="dim">Built at the ${esc(p.built)}.</p>` : ""}` +
+  (p.how ? `<h2>How it works</h2><ol>${p.how.map(r => `<li>${esc(r)}</li>`).join("")}</ol>` : "") +
+  (p.broke ? `<h2>What broke</h2><p>${esc(p.broke)}</p>` : "") +
+  (p.next ? `<h2>What's next</h2><p>${esc(p.next)}</p>` : "") +
+  (p.links && p.links.length ? `<h2>Links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
 const HOME = HTML.replace('<ul class="list" id="proj"></ul>', `<ul class="list" id="proj">${LIST}</ul>`);
 function projectHTML(pr) {
-  const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · alexander wondwossen`;
+  const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · Alexander Wondwossen`;
   let h = HOME
     .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pr.desc)}">`)
@@ -165,7 +139,7 @@ function projectHTML(pr) {
 
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
 const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
-const OG_BODY = '<div class="ogc"><div class="n">alexander wondwossen</div><div class="d">ai tools · apple apps · hardware that talks to agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
+const OG_BODY = '<div class="ogc"><div class="n">Alexander Wondwossen</div><div class="d">AI tools · Apple apps · hardware that talks to AI agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
 const noindex = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" };
 
 export default {
@@ -199,7 +173,6 @@ export default {
 
     if (p === "/api/push" && m === "GET") return json(await cached(ctx, "push", 300, () => lastPush(env)));
     if (p === "/api/game" && m === "GET") return json(await cached(ctx, "game", 3600, game));
-    if (p === "/api/log" && m === "GET") return json(await cached(ctx, "log", 600, () => activity(env)));
     if (p.startsWith("/api/asset/") && m === "PUT") {
       if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
