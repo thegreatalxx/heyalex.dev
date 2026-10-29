@@ -67,6 +67,30 @@ async function lastPush(env) {
   return e ? { repo: e.repo.name.split("/")[1], at: Date.parse(e.created_at) } : null;
 }
 
+// "lately": recent public github activity, one line per repo per day, newest first
+async function activity(env) {
+  const r = await fetch(`https://api.github.com/users/${env.GH_USER}/events/public?per_page=100`, { headers: { ...UA, accept: "application/vnd.github+json", ...(env.GH_TOKEN ? { authorization: "Bearer " + env.GH_TOKEN } : {}) } });
+  if (!r.ok) return null;
+  const day = iso => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date(iso));
+  const seen = new Map();
+  for (const e of await r.json()) {
+    const repo = e.repo.name.split("/")[1], owner = e.repo.name.split("/")[0], d = day(e.created_at);
+    let kind = null;
+    if (e.type === "PushEvent") kind = "push";
+    else if (e.type === "CreateEvent" && e.payload?.ref_type === "repository") kind = "start";
+    else if (e.type === "ReleaseEvent" && e.payload?.action === "published") kind = "release";
+    else if (e.type === "PublicEvent") kind = "public";
+    else if (e.type === "PullRequestEvent" && e.payload?.pull_request?.merged && owner !== env.GH_USER) kind = "merged";
+    if (!kind) continue;
+    const key = d + "|" + repo;
+    const prev = seen.get(key);
+    const rank = { release: 4, start: 3, public: 3, merged: 2, push: 1 };
+    if (!prev || rank[kind] > rank[prev.kind]) seen.set(key, { day: d, repo, owner, kind, tag: e.payload?.release?.tag_name || null, n: (prev?.n || 0) + (e.payload?.size || 0) });
+    else prev.n += e.payload?.size || 0;
+  }
+  return [...seen.values()].slice(0, 6);
+}
+
 async function game() {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
   try {
@@ -133,6 +157,7 @@ export default {
 
     if (p === "/api/push" && m === "GET") return json(await cached(ctx, "push", 300, () => lastPush(env)));
     if (p === "/api/game" && m === "GET") return json(await cached(ctx, "game", 3600, game));
+    if (p === "/api/log" && m === "GET") return json(await cached(ctx, "log", 600, () => activity(env)));
     if (p.startsWith("/api/asset/") && m === "PUT") {
       if (!(await authed(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
