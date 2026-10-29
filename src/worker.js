@@ -132,18 +132,35 @@ function skyPhase(ms) {
   return "night";
 }
 
-// project pages get real urls (/work/<id>) with their own title, description and canonical, read from the page's project list
-const PROJECTS = [...HTML.matchAll(/\{id:"([^"]+)",n:"([^"]+)",y:"[^"]*",d:"([^"]*)"/g)].map(m => ({ id: m[1], name: m[2], desc: m[3] }));
+// project data lives once, as json inside index.html. the server renders it into the html so search engines
+// (and anyone without js) get the full text; the page's own script then takes over.
+const PDATA = JSON.parse(HTML.match(/<script type="application\/json" id="projects-data">([\s\S]*?)<\/script>/)[1]);
+const PROJECTS = PDATA.map(p => ({ id: p.id, name: p.n, desc: p.d }));
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const LIST = PDATA.map(p => `<li data-id="${esc(p.id)}"><div class="row"><a class="n" href="/work/${esc(p.id)}">${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.y)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join("");
+const detailBody = p => `<h2>what it is</h2><p>${esc(p.what)}</p>${p.built ? `<p class="dim">built at the ${esc(p.built)}.</p>` : ""}` +
+  (p.how ? `<h2>how it works</h2><ol>${p.how.map(r => `<li>${esc(r)}</li>`).join("")}</ol>` : "") +
+  (p.broke ? `<h2>what broke</h2><p>${esc(p.broke)}</p>` : "") +
+  (p.next ? `<h2>what's next</h2><p>${esc(p.next)}</p>` : "") +
+  (p.links && p.links.length ? `<h2>links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
+const HOME = HTML.replace('<ul class="list" id="proj"></ul>', `<ul class="list" id="proj">${LIST}</ul>`);
 function projectHTML(pr) {
-  const url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · alexander wondwossen`;
-  return HTML
+  const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · alexander wondwossen`;
+  let h = HOME
     .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pr.desc)}">`)
     .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
     .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
     .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(title)}">`)
     .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pr.desc)}">`);
+  // show the project, hide the rest of main (same as the client router does)
+  const a = h.indexOf("<main>"), b = h.indexOf("</main>");
+  let main = h.slice(a, b).replace(/<section(?![^>]*id="detail")([^>]*?)( hidden)?>/g, "<section$1 hidden>");
+  main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
+    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(p.n)}</h1>`)
+    .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(p.y)} · ${esc(p.stack)}</p>`)
+    .replace('<div id="dbody"></div>', `<div id="dbody">${detailBody(p)}</div>`);
+  return h.slice(0, a) + main + h.slice(b);
 }
 
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
@@ -226,7 +243,7 @@ export default {
 
     if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
     if (p === "/" || p === "/index.html")
-      return new Response(m === "HEAD" ? null : HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
+      return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
     if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
