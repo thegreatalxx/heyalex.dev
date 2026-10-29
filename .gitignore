@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+*.mp4
+frames-*/
+frames-*/
+card-*.html
+api.json
+*.jpg

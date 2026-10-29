@@ -1,0 +1,30 @@
+name = "heyalex"
+main = "src/worker.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+routes = [
+  { pattern = "heyalex.dev", custom_domain = true },
+  { pattern = "www.heyalex.dev", custom_domain = true },
+]
+
+[observability]
+enabled = true
+
+[vars]
+LASTFM_USER = "thegreatalxx"
+GH_USER = "thegreatalxx"
+
+# STATUS: live status overrides + link-preview media
+[[kv_namespaces]]
+binding = "STATUS"
+id = "9ed339e2bddf4fa0a9bce1c8cb863fa9"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false
+
+# secrets (set with `npx wrangler secret put NAME`, never committed):
+#   LASTFM_KEY    last.fm api key
+#   STATUS_TOKEN  bearer token for POST /api/status and PUT /api/asset/*
+#   GH_TOKEN      optional, fine-grained github token with no permissions (rate limits)
