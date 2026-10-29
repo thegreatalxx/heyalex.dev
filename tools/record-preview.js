@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path');
 const [phase, outDir, seconds = '6', fps = '15'] = process.argv.slice(2);
-const F = p => path.join(__dirname, 'node_modules/@fontsource/jetbrains-mono/files', p);
+const F = p => require.resolve('@fontsource/jetbrains-mono/files/' + p);
 const fontCss = `@font-face{font-family:"JetBrains Mono";font-weight:400;src:url(data:font/woff2;base64,${fs.readFileSync(F('jetbrains-mono-latin-400-normal.woff2')).toString('base64')}) format("woff2")}
 @font-face{font-family:"JetBrains Mono";font-weight:500;src:url(data:font/woff2;base64,${fs.readFileSync(F('jetbrains-mono-latin-500-normal.woff2')).toString('base64')}) format("woff2")}`;
 (async () => {
