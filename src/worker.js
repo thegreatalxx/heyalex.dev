@@ -159,6 +159,13 @@ export default {
       }
       return new Response(m === "HEAD" ? null : buf, { headers: { ...base, "content-length": String(size) } });
     }
+    // real project screenshots (from each repo's readme), drawn as ascii by the page
+    const shot = /^\/p\/(mono|aether|exif)\.jpg$/.exec(p);
+    if (shot) {
+      const buf = await env.STATUS.get("shot:" + shot[1] + ".jpg", "arrayBuffer");
+      if (!buf) return new Response("not found", { status: 404 });
+      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } });
+    }
     if (p === "/og.jpg" || p === "/apple-touch-icon.png") {
       const isOg = p === "/og.jpg";
       let buf = isOg ? await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".jpg", "arrayBuffer") : null;
