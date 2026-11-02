@@ -143,41 +143,14 @@ const PAGES = {
     title: "Photography · Alexander Wondwossen",
     desc: "Photography: 1 to 5 years of shooting with a Nikon D7200. Portfolio coming soon.",
     h1: "Photography", sub: "1 to 5 years · Nikon D7200",
-    art: String.raw`            /\_______/\
-           /  o     o  \
-        (    ==  ^  ==    )
-           )    \___/    (
-        (  __/       \__  )
-         \__)  |     |  (__/
-+----------------------------------+
-|    [=]    NIKON D7200    [ ]     |
-|                                  |
-|          .-----------.           |
-|         /   .-----.   \          |
-|        |   |  (O)  |   |         |
-|         \   '-----'   /          |
-|          '-----------'           |
-+----------------------------------+`,
+    art: `<svg class="cat" viewBox="-110 -150 230 170" role="img" aria-label="A black cat sitting behind a Nikon camera, with a lens glowing in the dark"><defs><filter id="glow" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><line x1="-110" y1="0" x2="120" y2="0" stroke="#22232c"/><text x="-40" y="-132" font-family="JetBrains Mono,monospace" font-size="9" fill="#8a8a96">*click*</text><g fill="#0c0d14" stroke="#24252f" stroke-width="1.2"><ellipse cx="0" cy="-42" rx="28" ry="42"/><ellipse cx="14" cy="-95" rx="19" ry="17"/><path d="M0 -104 L2 -124 L12 -108 Z"/><path d="M16 -108 L28 -122 L30 -102 Z"/><ellipse cx="6" cy="-3" rx="14" ry="5"/></g><path d="M-18 -6 Q-62 -4 -50 -42" fill="none" stroke="#0c0d14" stroke-width="7" stroke-linecap="round"/><g fill="#ffb04d" filter="url(#glow)"><ellipse cx="9" cy="-97" rx="2.8" ry="3.4"/><ellipse cx="19" cy="-97" rx="2.8" ry="3.4"/></g><rect x="36" y="-80" width="18" height="8" rx="2" fill="#1a1b25" stroke="#3a3b48"/><rect x="26" y="-72" width="48" height="30" rx="4" fill="#1a1b25" stroke="#3a3b48"/><circle cx="54" cy="-57" r="9" fill="#0c0d14" stroke="#ffb04d" stroke-width="1.5"/><circle cx="54" cy="-57" r="4" fill="#ffb04d" opacity=".6"/><ellipse cx="26" cy="-44" rx="7" ry="6" fill="#0c0d14"/></svg>`,
     body: "<h2>Gear</h2><p>Nikon D7200.</p><h2>Experience</h2><p>1 to 5 years of shooting.</p><h2>Portfolio</h2><p>Photos coming soon.</p>",
   },
   business: {
     title: "Business · Alexander Wondwossen",
     desc: "Business experience: started a business selling payment services, and runs a youth financial literacy account.",
     h1: "Business", sub: "Payments · Youth financial literacy",
-    art: String.raw`             /\_______/\
-            /  -     -  \
-        (    ==  ^  ==    )
-            )     |     (
-        (   /|\  |   /|\   )
-          \__/ |_|_|_| \__/
-   +----------------------------+
-  |                   ##        |
-  |         ##        ##        |
-  |         ##   ##   ##        |
-  |    ##   ##   ##   ##        |
-  |    ##   ##   ##   ##        |
-   +============================+
-   ------------------------------`,
+    art: `<svg class="cat" viewBox="-110 -150 240 170" role="img" aria-label="A black cat in a red tie beside a briefcase"><defs><filter id="glow" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><line x1="-110" y1="0" x2="120" y2="0" stroke="#22232c"/><g fill="#0c0d14" stroke="#24252f" stroke-width="1.2"><ellipse cx="0" cy="-42" rx="28" ry="42"/><ellipse cx="14" cy="-95" rx="19" ry="17"/><path d="M0 -104 L2 -124 L12 -108 Z"/><path d="M16 -108 L28 -122 L30 -102 Z"/><ellipse cx="6" cy="-3" rx="14" ry="5"/></g><path d="M-18 -6 Q-62 -4 -50 -42" fill="none" stroke="#0c0d14" stroke-width="7" stroke-linecap="round"/><g fill="#ffb04d" filter="url(#glow)"><ellipse cx="9" cy="-97" rx="2.8" ry="3.4"/><ellipse cx="19" cy="-97" rx="2.8" ry="3.4"/></g><path d="M-4 -76 L4 -76 L6 -58 L0 -50 L-6 -58 Z" fill="#8b2d3a"/><rect x="-5" y="-80" width="10" height="6" rx="1" fill="#8b2d3a"/><path d="M66 -34 V-46 H90 V-34" fill="none" stroke="#3a3b48" stroke-width="3"/><rect x="50" y="-34" width="56" height="34" rx="4" fill="#1a1b25" stroke="#3a3b48"/><rect x="74" y="-22" width="8" height="7" rx="1" fill="#ffb04d"/></svg>`,
     body: "<h2>Business</h2><p>Started my own business selling payment services and related work.</p><h2>Financial literacy</h2><p>Runs a youth financial literacy account.</p>",
   },
 };
@@ -195,7 +168,7 @@ function pageHTML(key) {
   main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
     .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(pg.h1)}</h1>`)
     .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(pg.sub)}</p>`)
-    .replace('<div id="dbody"></div>', `<div id="dbody"><pre class="ascii" aria-hidden="true">${pg.art}</pre>${pg.body}<p class="dim"><a href="/">Back home</a></p></div>`);
+    .replace('<div id="dbody"></div>', `<div id="dbody">${pg.art}${pg.body}<p class="dim"><a href="/">Back home</a></p></div>`);
   return h.slice(0, a) + main + h.slice(b);
 }
 
