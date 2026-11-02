@@ -137,6 +137,68 @@ function projectHTML(pr) {
   return h.slice(0, a) + main + h.slice(b);
 }
 
+// standalone pages (not projects): photography and business. same shell as project pages.
+const PAGES = {
+  photography: {
+    title: "Photography · Alexander Wondwossen",
+    desc: "Photography: 1 to 5 years of shooting with a Nikon D7200. Portfolio coming soon.",
+    h1: "Photography", sub: "1 to 5 years · Nikon D7200",
+    art: String.raw`            /\_______/\
+           /  o     o  \
+        (    ==  ^  ==    )
+           )    \___/    (
+        (  __/       \__  )
+         \__)  |     |  (__/
++----------------------------------+
+|    [=]    NIKON D7200    [ ]     |
+|                                  |
+|          .-----------.           |
+|         /   .-----.   \          |
+|        |   |  (O)  |   |         |
+|         \   '-----'   /          |
+|          '-----------'           |
++----------------------------------+`,
+    body: "<h2>Gear</h2><p>Nikon D7200.</p><h2>Experience</h2><p>1 to 5 years of shooting.</p><h2>Portfolio</h2><p>Photos coming soon.</p>",
+  },
+  business: {
+    title: "Business · Alexander Wondwossen",
+    desc: "Business experience: started a business selling payment services, and runs a youth financial literacy account.",
+    h1: "Business", sub: "Payments · Youth financial literacy",
+    art: String.raw`             /\_______/\
+            /  -     -  \
+        (    ==  ^  ==    )
+            )     |     (
+        (   /|\  |   /|\   )
+          \__/ |_|_|_| \__/
+   +----------------------------+
+  |                   ##        |
+  |         ##        ##        |
+  |         ##   ##   ##        |
+  |    ##   ##   ##   ##        |
+  |    ##   ##   ##   ##        |
+   +============================+
+   ------------------------------`,
+    body: "<h2>Business</h2><p>Started my own business selling payment services and related work.</p><h2>Financial literacy</h2><p>Runs a youth financial literacy account.</p>",
+  },
+};
+function pageHTML(key) {
+  const pg = PAGES[key], url = "https://heyalex.dev/" + key;
+  let h = HOME
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(pg.title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pg.desc)}">`)
+    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
+    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(pg.title)}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pg.desc)}">`);
+  const a = h.indexOf("<main>"), b = h.indexOf("</main>");
+  let main = h.slice(a, b).replace(/<section(?![^>]*id="detail")([^>]*?)( hidden)?>/g, "<section$1 hidden>");
+  main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
+    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(pg.h1)}</h1>`)
+    .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(pg.sub)}</p>`)
+    .replace('<div id="dbody"></div>', `<div id="dbody"><pre class="ascii" aria-hidden="true">${pg.art}</pre>${pg.body}<p class="dim"><a href="/">Back home</a></p></div>`);
+  return h.slice(0, a) + main + h.slice(b);
+}
+
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
 const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
 const OG_BODY = '<div class="ogc"><div class="n">Alexander Wondwossen</div><div class="d">AI tools · Apple apps · hardware that talks to AI agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
@@ -219,8 +281,10 @@ export default {
       return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
     if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
+    const pgk = /^\/(photography|business)\/?$/.exec(p);
+    if (pgk) return new Response(m === "HEAD" ? null : pageHTML(pgk[1]), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
-    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
+    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + "<url><loc>https://heyalex.dev/photography</loc></url><url><loc>https://heyalex.dev/business</loc></url>" + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(null, { status: 301, headers: { location: "/" } });
   },
