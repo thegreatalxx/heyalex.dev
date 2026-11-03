@@ -117,7 +117,10 @@ const detailBody = p => `<h2>What it is</h2><p>${esc(p.what)}</p>${p.built ? `<p
   (p.broke ? `<h2>What broke</h2><p>${esc(p.broke)}</p>` : "") +
   (p.next ? `<h2>What's next</h2><p>${esc(p.next)}</p>` : "") +
   (p.links && p.links.length ? `<h2>Links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
-const HOME = HTML.replace('<ul class="list" id="proj"></ul>', `<ul class="list" id="proj">${LIST}</ul>`);
+const PGDATA = JSON.parse(HTML.match(/<script type="application\/json" id="pages-data">([\s\S]*?)<\/script>/)[1]);
+const HOME = HTML.replace('<ul class="list" id="proj"></ul>', `<ul class="list" id="proj">${LIST}</ul>`)
+  .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}</ul>`);
+function PGLIST() { return PGDATA.map(p => `<li><div class="row"><a class="n" href="/${esc(p.id)}" data-page>${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.tag)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join(""); }
 function projectHTML(pr) {
   const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · Alexander Wondwossen`;
   let h = HOME
@@ -137,104 +140,25 @@ function projectHTML(pr) {
   return h.slice(0, a) + main + h.slice(b);
 }
 
-// standalone pages (not projects): photography and business. same shell as project pages.
-const PAGES = {
-  photography: {
-    title: "Photography · Alexander Wondwossen",
-    desc: "Photography: 1 to 5 years of shooting with a Nikon D7200. Portfolio coming soon.",
-    h1: "Photography", sub: "1 to 5 years · Nikon D7200",
-    alt: "A black cat sitting behind a camera",
-    art: String.raw`   .+.                   -+
-    @@*:               =%@*
-    %%+%#:           =%#+@=
-    #@.:+%#:       =%#-.=@:
-    +@:..:#@#*###*@@+.. +@.
-    =@+*%@@@@@@@@@@@@@#=#@
-    .%@@@@@@@@@@@@@@@@@@@*
-    #@@@@@@@@@@@@@@@@@@@@@-
-   =@@@@%*+%@@@@@@%#+#@@@@@.
-   #@@@%*: +#@@@@@*- +#@@@@:
-   =@@@@@%%@@@@@@@@%%@@@@@@
- .  *@@@@@@@@@*=%@@@@@@@@@- ..
- .   =@@@@@@@@@%@@@@@@@@#:  .
-       =%@@@@@@@@@@@@@*:
-      -*@@@@@@@@@@@@@@%+.
-    :#@@@@@@@@@@@@@@@@@@@+    .------:
-   =@@@@@@@@%#%%%#@@@@@@@@#.  :@%%%%%*
-  =@@@@@@@@@@%###%@@@@@@@@@%**#%####%%**********+.
- :@@@@@@@@@@@@@@@@@@@@@@@@@%%@@%#%%%*+*#%%%%%%%%%-
- %@@@@@@@@@@@@@@@@@@@@@@@@@%####%%=..--.:*%#####%:
-:@@@@@@@@@@@@@@@@@@@@@@@@@@%#%%#@* -@@@%. %%####%#.
-+@@@@@@@@@@@@@@@@@@@@@@@@@@%#%##%#..+##= -%%###%#@@:
-+@@@@@@@@@@@@@@@@@@@@@@@@@@%#%%%#%%=:::-+%%#%%%%#%@%
-+@@@@@@@@@@@@@@@@@@@@@@@@@@%#######%%%%%%########@@@-
-:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@+.              . -@@@+
- %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.                :@@@+
- -@@@@@@@@@@@@@@@@@@@@@@@@@@%:                  +@@@-
-  +@@@@@@@@@@@@@@@@@@@@@@@@@.                  -@@@%
-   =@@@@@@@@@@@@@@@@@@@@@@%.                  +@@@%.
-    :#@@@@@@@@@@@@@@@@@@@+     .          .-*@@@@*
-     -%@@@@@@@@@@@@@@@@@*-.  .@@@%%#####%@@@@@@*:
-   +@@@@@@@@@@@@@@@@@@@@@@@+ .*#%@@@@@@@@@%*+:
-   .+#%%@@%%#+---+#%%@@%%#+:     ...:::...`,
-    body: "<h2>Gear</h2><p>Nikon D7200.</p><h2>Experience</h2><p>1 to 5 years of shooting.</p><h2>Portfolio</h2><p>Photos coming soon.</p>",
-  },
-  business: {
-    title: "Business · Alexander Wondwossen",
-    desc: "Business experience: started a business selling payment services, and runs a youth financial literacy account.",
-    h1: "Business", sub: "Payments · Youth financial literacy",
-    alt: "A black cat in a tie beside a briefcase",
-    art: String.raw`   .+.                   -+
-    @@*:               =%@*
-    %%+%#:           =%#+@=
-    #@.:+%#:       =%#-.=@:
-    +@:..:#@#*###*@@+.. +@.
-    =@+*%@@@@@@@@@@@@@#=#@
-    .%@@@@@@@@@@@@@@@@@@@*
-    #@@@@@@@@@@@@@@@@@@@@@-
-   =@@@@%*+%@@@@@@%#+#@@@@@.
-   #@@@%*: +#@@@@@*- +#@@@@:
-   =@@@@@%%@@@@@@@@%%@@@@@@
- .  *@@@@@@@@@*=%@@@@@@@@@- ..
- .   =@@@@@@@@@@@@@@@@@@#:  .
-       =%@@@@@%@%@@@@@*:
-      -*@@@@@%###@@@@@%+.
-    :#@@@@@@@****#@@@@@@@+
-   =@@@@@@@@%*****@@@@@@@@#.
-  =@@@@@@@@@@#***%@@@@@@@@@%.
- :@@@@@@@@@@@@**#@@@@@@@@@@@#
- %@@@@@@@@@@@@#*%@@@@@@@@@@@@=             -+*+=:
-:@@@@@@@@@@@@@@#@@@@@@@@@@@@@%           :%@@@@@@#.
-+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.          #@@@-=@@@@:
-+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.           --.  :@@@%
-+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:-========-       *@@@-
-:@@@@@@@@@@@@@@@@@@@@@@@@@@@@%#*:::::::-#*      -@@@+
- %@@@@@@@@@@@@@@@@@@@@@@@@@@@*%-        =%      :@@@+
- -@@@@@@@@@@@@@@@@@@@@@@@@@@#.%-        +%      *@@@:
-  +@@@@@@@@@@@@@@@@@@@@@@@@@%#@*========*#+====+%%%%=
-   =@@@@@@@@@@@@@@@@@@@@@@@@@@@@%%%%%%%%%%%%%%%%####%.
-    :#@@@@@@@@@@@@@@@@@@@+.###########%@@@###########.
-     -%@@@@@@@@@@@@@@@@@*::***********####***********.
-   +@@@@@@@@@@@@@@@@@@@@@@@%%%%%%%%%%%%%%%%%%%%%%%%%%.
-   .+#%%@@%%#+---+#%%@@%%#+**************************.`,
-    body: "<h2>Business</h2><p>Started my own business selling payment services and related work.</p><h2>Financial literacy</h2><p>Runs a youth financial literacy account.</p>",
-  },
-};
-function pageHTML(key) {
-  const pg = PAGES[key], url = "https://heyalex.dev/" + key;
+// standalone pages (photography, business) live as json in index.html too. same shell as project pages;
+// the client router animates their ascii scene in #dprev.
+const pageBody = p => p.sections.map(r => `<h2>${esc(r.h)}</h2><p>${esc(r.p)}</p>` + (r.links ? `<p>${r.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} →</a>`).join(" · ")}</p>` : "")).join("");
+function pageHTML(pg) {
+  const url = "https://heyalex.dev/" + pg.id, title = `${pg.n} · Alexander Wondwossen`;
   let h = HOME
-    .replace(/<title>[^<]*<\/title>/, `<title>${esc(pg.title)}</title>`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pg.desc)}">`)
     .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
     .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
-    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(pg.title)}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(title)}">`)
     .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pg.desc)}">`);
   const a = h.indexOf("<main>"), b = h.indexOf("</main>");
   let main = h.slice(a, b).replace(/<section(?![^>]*id="detail")([^>]*?)( hidden)?>/g, "<section$1 hidden>");
   main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
-    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(pg.h1)}</h1>`)
+    .replace('<a class="back" href="/#work">← All work</a>', '<a class="back" href="/#more">← Home</a>')
+    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(pg.n)}</h1>`)
     .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(pg.sub)}</p>`)
-    .replace('<div id="dbody"></div>', `<div id="dbody"><pre class="ascii" role="img" aria-label="${esc(pg.alt)}">${pg.art}</pre>${pg.body}<p class="dim"><a href="/">Back home</a></p></div>`);
+    .replace('<div id="dbody"></div>', `<div id="dbody">${pageBody(pg)}</div>`);
   return h.slice(0, a) + main + h.slice(b);
 }
 
@@ -320,10 +244,10 @@ export default {
       return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
     if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
-    const pgk = /^\/(photography|business)\/?$/.exec(p);
-    if (pgk) return new Response(m === "HEAD" ? null : pageHTML(pgk[1]), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
+    const pgm = /^\/([a-z-]+)\/?$/.exec(p), pgd = pgm && PGDATA.find(x => x.id === pgm[1]);
+    if (pgd) return new Response(m === "HEAD" ? null : pageHTML(pgd), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
-    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + "<url><loc>https://heyalex.dev/photography</loc></url><url><loc>https://heyalex.dev/business</loc></url>" + '</urlset>', { headers: { "content-type": "application/xml" } });
+    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(null, { status: 301, headers: { location: "/" } });
   },
