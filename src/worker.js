@@ -140,7 +140,7 @@ function projectHTML(pr) {
   return h.slice(0, a) + main + h.slice(b);
 }
 
-// standalone pages (photography, business) live as json in index.html too. same shell as project pages;
+// standalone pages (business) live as json in index.html too. same shell as project pages;
 // the client router animates their ascii scene in #dprev.
 const pageBody = p => p.sections.map(r => `<h2>${esc(r.h)}</h2><p>${esc(r.p)}</p>` + (r.links ? `<p>${r.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} →</a>`).join(" · ")}</p>` : "")).join("");
 function pageHTML(pg) {
@@ -170,6 +170,7 @@ const noindex = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "n
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url), p = url.pathname, m = req.method;
+    if (p === "/photography") return new Response(null, { status: 301, headers: { location: "https://heyalex.dev/#side" } });
     if (url.hostname === "www.heyalex.dev") return new Response(null, { status: 301, headers: { location: "https://heyalex.dev" + p + url.search } });
 
     if (p === "/api/status" && m === "GET") {
