@@ -13,7 +13,8 @@ for p in rise noon set dusk night; do
   ffmpeg -y -loglevel error -framerate 15 -i "frames-$p/f%04d.png" -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p -movflags +faststart "og-$p.mp4"
   ffmpeg -y -loglevel error -i "frames-$p/f0045.png" -q:v 3 "og-$p.jpg"
   for f in "og-$p.mp4" "og-$p.jpg"; do
-    curl -fsS -X PUT "https://heyalex.dev/api/asset/$f" -H "authorization: Bearer $TOKEN" --data-binary "@$f"; echo
+    # the header goes in on stdin, so the token never shows up in the process list
+    printf 'authorization: Bearer %s\n' "$TOKEN" | curl -fsS -X PUT "https://heyalex.dev/api/asset/$f" -H @- --data-binary "@$f"; echo
   done
 done
 rm -rf frames-* card-*.html api.json
