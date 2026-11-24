@@ -19,12 +19,15 @@ npx wrangler deploy     # ships to heyalex.dev
 
 secrets live in cloudflare, never in this repo: `LASTFM_KEY`, `STATUS_TOKEN`, `GH_TOKEN`.
 
+```bash
+npm test                # offline worker tests, plain node (22.15+), no install needed
+```
+
 ## set the status
 
 ```bash
-curl -X POST https://heyalex.dev/api/status \
-  -H "authorization: Bearer $STATUS_TOKEN" \
-  -d '{"kind":"custom","text":"alex is at the gym (lying)","minutes":60}'
+printf 'authorization: Bearer %s\n' "$STATUS_TOKEN" | curl -X POST https://heyalex.dev/api/status \
+  -H @- -d '{"kind":"custom","text":"alex is at the gym (lying)","minutes":60}'
 ```
 
 `{"kind":"claude"}` → "alex is harassing claude again". `{"clear":true}` goes back to the clock.

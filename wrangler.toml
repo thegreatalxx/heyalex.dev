@@ -1,7 +1,10 @@
 name = "heyalex"
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
-workers_dev = true
+# only heyalex.dev serves the site: no *.workers.dev route and no public version-preview urls
+# (the worker also redirects any *.workers.dev host to heyalex.dev, in case either gets switched back on)
+workers_dev = false
+preview_urls = false
 routes = [
   { pattern = "heyalex.dev", custom_domain = true },
   { pattern = "www.heyalex.dev", custom_domain = true },

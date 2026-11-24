@@ -4,27 +4,28 @@ import FAVICON_SVG from "./icons/favicon.svg";
 import FAVICON_32 from "./icons/favicon-32.png";
 import TOUCH_ICON from "./icons/apple-touch-icon.png";
 
-// the page's inline script is allowed by hash, so editing index.html never needs a manual csp update
-let CSP_PROMISE;
-function csp() {
-  return (CSP_PROMISE ||= (async () => {
-    const script = HTML.match(/<script>([\s\S]*?)<\/script>/)[1];
+// every inline script on a page is allowed by its hash, so editing index.html never needs a manual csp update
+async function cspFor(html) {
+  const hashes = await Promise.all([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(async ([, script]) => {
     const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(script));
-    const sha = btoa(String.fromCharCode(...new Uint8Array(d)));
-    return [
-      "default-src 'none'",
-      `script-src 'sha256-${sha}' https://static.cloudflareinsights.com`,
-      "style-src 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src https://fonts.gstatic.com",
-      "img-src 'self' data:",
-      "connect-src 'self' https://api.open-meteo.com https://cloudflareinsights.com",
-      "base-uri 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'none'",
-      "upgrade-insecure-requests",
-    ].join("; ");
-  })());
+    return `'sha256-${btoa(String.fromCharCode(...new Uint8Array(d)))}'`;
+  }));
+  return [
+    "default-src 'none'",
+    `script-src ${hashes.join(" ")} https://static.cloudflareinsights.com`,
+    "style-src 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self' https://api.open-meteo.com https://cloudflareinsights.com",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
 }
+let CSP_PROMISE, OG_CSP_PROMISE;
+const csp = () => (CSP_PROMISE ||= cspFor(HTML));
+const ogCsp = () => (OG_CSP_PROMISE ||= cspFor(OG_HTML));
 
 const SEC = {
   "x-content-type-options": "nosniff",
@@ -50,20 +51,40 @@ const authedUpload = async (req, env) => {
   return !!t && t.length >= 32 && same(req.headers.get("authorization") || "", "Bearer " + t);
 };
 
-// upstreams are hit at most once per ttl per edge location, however much traffic the site gets
+// upstreams are refreshed about once per ttl per edge location, however much traffic the site gets:
+// a fresh value comes straight from the cache, a stale one is served while one background refresh runs,
+// and requests that miss at the same time share a single in-flight upstream call instead of each making one.
+// stale values are kept for one extra ttl, so steady traffic never falls back to a cold miss.
+const inflight = new Map();
 async function cached(ctx, key, ttl, fn) {
-  const cache = caches.default, req = new Request("https://cache.heyalex.dev/" + key);
+  const cache = caches.default, req = new Request("https://cache.heyalex.dev/v2/" + key);
   const hit = await cache.match(req);
-  if (hit) return hit.json();
-  let val = null;
-  try { val = await fn(); } catch (e) {}
-  ctx.waitUntil(cache.put(req, new Response(JSON.stringify(val), { headers: { "cache-control": `max-age=${val === null ? Math.min(ttl, 60) : ttl}` } })));
-  return val;
+  if (hit) {
+    const { v, exp } = await hit.json();
+    if (Date.now() >= exp) ctx.waitUntil(refresh(ctx, cache, req, key, ttl, fn));
+    return v;
+  }
+  return refresh(ctx, cache, req, key, ttl, fn);
 }
+function refresh(ctx, cache, req, key, ttl, fn) {
+  let p = inflight.get(key);
+  if (!p) {
+    p = (async () => { try { return await fn(); } catch (e) { return null; } })();
+    inflight.set(key, p);
+    // keep the entry until the new value is stored, so nothing slips in between the fetch and the put
+    ctx.waitUntil(p.then(v => {
+      const fresh = v === null ? Math.min(ttl, 60) : ttl;
+      return cache.put(req, new Response(JSON.stringify({ v, exp: Date.now() + fresh * 1000 }), { headers: { "cache-control": `max-age=${fresh + ttl}` } }));
+    }).catch(() => {}).finally(() => inflight.delete(key)));
+  }
+  return p;
+}
+// a slow upstream must not hold requests (or the shared refresh) open
+const UPSTREAM_TIMEOUT = 5000;
 
 async function lastfm(env) {
   const q = new URLSearchParams({ method: "user.getrecenttracks", user: env.LASTFM_USER, api_key: env.LASTFM_KEY, format: "json", limit: "1" });
-  const r = await fetch("https://ws.audioscrobbler.com/2.0/?" + q, { headers: UA });
+  const r = await fetch("https://ws.audioscrobbler.com/2.0/?" + q, { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
   if (!r.ok) return null;
   const t = (await r.json())?.recenttracks?.track?.[0];
   if (!t || t["@attr"]?.nowplaying !== "true") return null;
@@ -71,7 +92,7 @@ async function lastfm(env) {
 }
 
 async function lastPush(env) {
-  const r = await fetch(`https://api.github.com/users/${env.GH_USER}/events/public?per_page=30`, { headers: { ...UA, accept: "application/vnd.github+json", ...(env.GH_TOKEN ? { authorization: "Bearer " + env.GH_TOKEN } : {}) } });
+  const r = await fetch(`https://api.github.com/users/${env.GH_USER}/events/public?per_page=30`, { headers: { ...UA, accept: "application/vnd.github+json", ...(env.GH_TOKEN ? { authorization: "Bearer " + env.GH_TOKEN } : {}) }, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
   if (!r.ok) return null;
   const e = (await r.json()).find(x => x.type === "PushEvent");
   return e ? { repo: e.repo.name.split("/")[1], at: Date.parse(e.created_at) } : null;
@@ -80,11 +101,11 @@ async function lastPush(env) {
 async function game() {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
   try {
-    const j = await (await fetch("https://api-web.nhle.com/v1/club-schedule/TOR/week/now", { headers: UA })).json();
+    const j = await (await fetch("https://api-web.nhle.com/v1/club-schedule/TOR/week/now", { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })).json();
     if ((j.games || []).some(g => g.gameDate === today)) return { game: "leafs" };
   } catch (e) {}
   try {
-    const j = await (await fetch("https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json", { headers: UA })).json();
+    const j = await (await fetch("https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json", { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })).json();
     if ((j?.scoreboard?.games || []).some(g => g.homeTeam?.teamTricode === "TOR" || g.awayTeam?.teamTricode === "TOR")) return { game: "raptors" };
   } catch (e) {}
   return { game: null };
@@ -118,25 +139,26 @@ const detailBody = p => `<h2>What it is</h2><p>${esc(p.what)}</p>${p.built ? `<p
   (p.next ? `<h2>What's next</h2><p>${esc(p.next)}</p>` : "") +
   (p.links && p.links.length ? `<h2>Links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
 const PGDATA = JSON.parse(HTML.match(/<script type="application\/json" id="pages-data">([\s\S]*?)<\/script>/)[1]);
-const HOME = HTML.replace('<ul class="list" id="proj"></ul>', `<ul class="list" id="proj">${LIST}</ul>`)
+// replacements are functions so a "$&", "$`" or "$'" in the data can never splice other parts of the page in
+const HOME = HTML.replace('<ul class="list" id="proj"></ul>', () => `<ul class="list" id="proj">${LIST}</ul>`)
   .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}</ul>`);
 function PGLIST() { return PGDATA.map(p => `<li><div class="row"><a class="n" href="/${esc(p.id)}" data-page>${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.tag)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join(""); }
 function projectHTML(pr) {
   const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · Alexander Wondwossen`;
   let h = HOME
-    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
-    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pr.desc)}">`)
-    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
-    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
-    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(title)}">`)
-    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pr.desc)}">`);
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${esc(pr.desc)}">`)
+    .replace(/<link rel="canonical" href="[^"]*">/, () => `<link rel="canonical" href="${url}">`)
+    .replace(/<meta property="og:url" content="[^"]*">/, () => `<meta property="og:url" content="${url}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, () => `<meta property="og:title" content="${esc(title)}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, () => `<meta property="og:description" content="${esc(pr.desc)}">`);
   // show the project, hide the rest of main (same as the client router does)
   const a = h.indexOf("<main>"), b = h.indexOf("</main>");
   let main = h.slice(a, b).replace(/<section(?![^>]*id="detail")([^>]*?)( hidden)?>/g, "<section$1 hidden>");
-  main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
-    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(p.n)}</h1>`)
-    .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(p.y)} · ${esc(p.stack)}</p>`)
-    .replace('<div id="dbody"></div>', `<div id="dbody">${detailBody(p)}</div>`);
+  main = main.replace('<section id="detail" hidden>', '<section id="detail">')
+    .replace('<h1 id="dtitle"></h1>', () => `<h1 id="dtitle">${esc(p.n)}</h1>`)
+    .replace('<p class="sub" id="dsub"></p>', () => `<p class="sub" id="dsub">${esc(p.y)} · ${esc(p.stack)}</p>`)
+    .replace('<div id="dbody"></div>', () => `<div id="dbody">${detailBody(p)}</div>`);
   return h.slice(0, a) + main + h.slice(b);
 }
 
@@ -146,32 +168,40 @@ const pageBody = p => p.sections.map(r => `<h2>${esc(r.h)}</h2><p>${esc(r.p)}</p
 function pageHTML(pg) {
   const url = "https://heyalex.dev/" + pg.id, title = `${pg.n} · Alexander Wondwossen`;
   let h = HOME
-    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
-    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(pg.desc)}">`)
-    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
-    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${url}">`)
-    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(title)}">`)
-    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(pg.desc)}">`);
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${esc(pg.desc)}">`)
+    .replace(/<link rel="canonical" href="[^"]*">/, () => `<link rel="canonical" href="${url}">`)
+    .replace(/<meta property="og:url" content="[^"]*">/, () => `<meta property="og:url" content="${url}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, () => `<meta property="og:title" content="${esc(title)}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, () => `<meta property="og:description" content="${esc(pg.desc)}">`);
   const a = h.indexOf("<main>"), b = h.indexOf("</main>");
   let main = h.slice(a, b).replace(/<section(?![^>]*id="detail")([^>]*?)( hidden)?>/g, "<section$1 hidden>");
-  main = main.replace('<section id="detail" hidden aria-live="polite">', '<section id="detail" aria-live="polite">')
+  main = main.replace('<section id="detail" hidden>', '<section id="detail">')
     .replace('<a class="back" href="/#work">← All work</a>', '<a class="back" href="/#more">← Home</a>')
-    .replace('<h1 id="dtitle"></h1>', `<h1 id="dtitle">${esc(pg.n)}</h1>`)
-    .replace('<p class="sub" id="dsub"></p>', `<p class="sub" id="dsub">${esc(pg.sub)}</p>`)
-    .replace('<div id="dbody"></div>', `<div id="dbody">${pageBody(pg)}</div>`);
+    .replace('<h1 id="dtitle"></h1>', () => `<h1 id="dtitle">${esc(pg.n)}</h1>`)
+    .replace('<p class="sub" id="dsub"></p>', () => `<p class="sub" id="dsub">${esc(pg.sub)}</p>`)
+    .replace('<div id="dbody"></div>', () => `<div id="dbody">${pageBody(pg)}</div>`);
   return h.slice(0, a) + main + h.slice(b);
 }
 
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
 const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
-const OG_BODY = '<div class="ogc"><div class="n">Alexander Wondwossen</div><div class="d">AI tools · Apple apps · hardware that talks to AI agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const b=document.querySelector(\'#preview [data-p="\'+(new URLSearchParams(location.search).get("p")||"set")+\'"]\');b&&b.click()},200))</script>';
+const OG_BODY = '<div class="ogc"><div class="n">Alexander Wondwossen</div><div class="d">AI tools · Apple apps · hardware that talks to AI agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const p=new URLSearchParams(location.search).get("p")||"set",b=["rise","noon","set","dusk","night","live"].includes(p)&&document.querySelector(\'#preview [data-p="\'+p+\'"]\');b&&b.click()},200))</script>';
+const OG_HTML = HTML.replace("</head>", () => OG_CSS + "</head>").replace("</body>", () => OG_BODY + "</body>");
 const noindex = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" };
+
+// unknown paths get a real 404: a permanent redirect to / is cached by browsers forever and reads as a soft 404
+const NOT_FOUND = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not found · Alexander Wondwossen</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>:root{color-scheme:dark}body{margin:0;min-height:100svh;display:grid;place-items:center;background:#07080e;color:#ecebe6;font:14px/1.7 ui-monospace,"SF Mono",Menlo,monospace}main{padding:24px;max-width:560px}h1{font-size:14px;font-weight:500;margin:0 0 6px}h1:before{content:"## ";color:#8a8a96}p{margin:0;color:#8a8a96}a{color:#ecebe6;text-decoration:none;border-bottom:1px solid #3a3b48}a:hover{border-color:#ecebe6}:focus-visible{outline:1px solid #ecebe6;outline-offset:3px}</style></head><body><main><h1>404</h1><p>Nothing lives here. The cats probably knocked it into the lake. <a href="/">Back to heyalex.dev</a></p></main></body></html>';
+const NOT_FOUND_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url), p = url.pathname, m = req.method;
     if (p === "/photography") return new Response(null, { status: 301, headers: { location: "https://heyalex.dev/#side" } });
     if (url.hostname === "www.heyalex.dev") return new Response(null, { status: 301, headers: { location: "https://heyalex.dev" + p + url.search } });
+    // the site only lives on heyalex.dev: workers.dev and version-preview hostnames bounce there, so nothing
+    // (least of all the upstream-keyed apis) is served on a hostname the edge cache and zone rules may not cover
+    if (url.hostname.endsWith(".workers.dev")) return new Response(null, { status: 301, headers: { location: "https://heyalex.dev" + p + url.search } });
 
     if (p === "/api/status" && m === "GET") {
       // manual (conduit / custom, auto-expires) > now playing > push in the last 3h > nothing (page uses the clock)
@@ -187,6 +217,7 @@ export default {
     if (p === "/api/status" && m === "POST") {
       if (!(await authed(req, env))) return json({ error: "unauthorized" }, 401);
       let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
+      if (!b || typeof b !== "object" || Array.isArray(b)) return json({ error: "bad json" }, 400);
       if (b.clear) { await env.STATUS.delete("manual"); return json({ ok: true, cleared: true }); }
       const mins = Math.min(Math.max(Math.round(Number(b.minutes)) || 30, 1), 1440);
       let v;
@@ -203,6 +234,8 @@ export default {
       if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
       if (!/^og-(rise|noon|set|dusk|night)\.(mp4|jpg)$/.test(name)) return json({ error: "bad name" }, 400);
+      // refuse a declared oversize body before buffering it; the length check after reading still covers chunked uploads
+      if (Number(req.headers.get("content-length")) > 4e6) return json({ error: "too big" }, 413);
       const body = await req.arrayBuffer();
       if (body.byteLength > 4e6) return json({ error: "too big" }, 413);
       await env.STATUS.put("asset:" + name, body);
@@ -210,12 +243,14 @@ export default {
     }
     if (p.startsWith("/api/")) return json({ error: "not found" }, 404);
 
-    if (p === "/og-card") return new Response(HTML.replace("</head>", OG_CSS + "</head>").replace("</body>", OG_BODY + "</body>"), { headers: noindex });
+    // everything below only reads
+    if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
+    if (p === "/og-card") return new Response(m === "HEAD" ? null : OG_HTML, { headers: { ...noindex, "content-security-policy": await ogCsp(), ...SEC } });
     if (p === "/og.mp4") {
       const buf = await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".mp4", "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
       const size = buf.byteLength, rg = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") || "");
-      const base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=600" };
+      const base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=600", "x-content-type-options": "nosniff" };
       if (rg) {
         let s = rg[1] === "" ? size - Number(rg[2]) : Number(rg[1]), e = rg[1] !== "" && rg[2] !== "" ? Number(rg[2]) : size - 1;
         s = Math.max(0, s); e = Math.min(size - 1, e);
@@ -229,18 +264,17 @@ export default {
     if (shot) {
       const buf = await env.STATUS.get("shot:" + shot[1] + ".jpg", "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
-      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } });
+      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" } });
     }
     if (p === "/og.jpg") {
       let buf = await env.STATUS.get("asset:og-" + skyPhase(Date.now()) + ".jpg", "arrayBuffer");
       if (!buf) buf = await env.STATUS.get("asset:og.jpg", "arrayBuffer");
       if (!buf) return new Response("not found", { status: 404 });
-      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=600" } });
+      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=600", "x-content-type-options": "nosniff" } });
     }
     const icon = { "/favicon.svg": [FAVICON_SVG, "image/svg+xml"], "/favicon-32.png": [FAVICON_32, "image/png"], "/favicon.ico": [FAVICON_32, "image/png"], "/apple-touch-icon.png": [TOUCH_ICON, "image/png"], "/apple-touch-icon-precomposed.png": [TOUCH_ICON, "image/png"] }[p];
-    if (icon) return new Response(m === "HEAD" ? null : icon[0], { headers: { "content-type": icon[1], "cache-control": "public, max-age=604800" } });
+    if (icon) return new Response(m === "HEAD" ? null : icon[0], { headers: { "content-type": icon[1], "cache-control": "public, max-age=604800", "x-content-type-options": "nosniff" } });
 
-    if (m !== "GET" && m !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
     if (p === "/" || p === "/index.html")
       return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
@@ -250,6 +284,6 @@ export default {
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
     if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
-    return new Response(null, { status: 301, headers: { location: "/" } });
+    return new Response(m === "HEAD" ? null : NOT_FOUND, { status: 404, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300", "content-security-policy": NOT_FOUND_CSP, ...SEC } });
   },
 };
