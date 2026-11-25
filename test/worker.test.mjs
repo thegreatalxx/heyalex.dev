@@ -62,14 +62,16 @@ function makeKV(init = {}) {
   };
 }
 
-// upstream stand-ins; calls are counted when made, before the (optional) delay
-let calls, upstreamDelay, githubStatus;
+// upstream stand-ins; calls are counted when made, before the (optional) delay.
+// a test can answer a host itself through `upstreams[host] = url => Response`.
+let calls, upstreamDelay, githubStatus, upstreams;
 globalThis.fetch = async (input, init = {}) => {
   const u = new URL(typeof input === "string" ? input : input.url);
   calls.signals.push(init.signal);
   const host = u.hostname;
   calls[host] = (calls[host] || 0) + 1;
   await new Promise(r => setTimeout(r, upstreamDelay));
+  if (upstreams[host]) return upstreams[host](u);
   if (host === "api.github.com") return githubStatus === 200
     ? Response.json([{ type: "PushEvent", repo: { name: "thegreatalxx/heyalex.dev" }, created_at: new Date(Date.now() - 60e3).toISOString() }])
     : new Response("rate limited", { status: githubStatus });
@@ -91,6 +93,7 @@ beforeEach(() => {
   skew = 0;
   upstreamDelay = 0;
   githubStatus = 200;
+  upstreams = {};
   calls = { signals: [] };
   globalThis.caches = { default: makeCache() };
   env = { STATUS: makeKV(), LASTFM_USER: "u", GH_USER: "u", LASTFM_KEY: "k", GH_TOKEN: "g", STATUS_TOKEN };
@@ -280,4 +283,88 @@ test("every upstream fetch carries a timeout signal", async () => {
   await call("/api/game");
   assert.ok(calls.signals.length >= 4);
   for (const s of calls.signals) assert.ok(s instanceof AbortSignal, "fetch has an AbortSignal");
+});
+
+// ---- /api/sky: the waterfront's live data ----
+
+const zoned = (ms, opts) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto", ...opts }).format(new Date(ms));
+// utc ms for a toronto wall-clock time, worked out independently of the worker's own helper
+const torontoAt = (date, hhmm) => {
+  const off = new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", timeZoneName: "longOffset" })
+    .formatToParts(new Date(Date.parse(`${date}T12:00:00Z`))).find(p => p.type === "timeZoneName").value.replace("GMT", "");
+  return Date.parse(`${date}T${hhmm}:00${off}`);
+};
+
+test("/api/sky: tonight's games, tower lights, island flights, snow and ice from their upstreams", async () => {
+  const now = Date.now(), day = zoned(now - 4 * 3600e3), today = zoned(now), tomorrow = zoned(now + 864e5), iso = new Date(now - 3 * 3600e3).toISOString();
+  upstreams["api-web.nhle.com"] = u => {
+    assert.ok(u.pathname.endsWith("/week/" + day), "asks for tonight's week");
+    return Response.json({ games: [
+      { gameDate: day, startTimeUTC: iso, gameState: "OFF", gameScheduleState: "OK", homeTeam: { abbrev: "TOR", score: 4 }, awayTeam: { abbrev: "MTL", score: 2 } },
+      { gameDate: "1999-01-01", startTimeUTC: iso, gameState: "FUT", homeTeam: { abbrev: "BOS" }, awayTeam: { abbrev: "TOR" } },
+    ] });
+  };
+  upstreams["cdn.nba.com"] = () => Response.json({ scoreboard: { gameDate: day, games: [
+    { gameStatus: 2, gameStatusText: "Q3 4:12", gameTimeUTC: iso, homeTeam: { teamTricode: "BOS", score: 80 }, awayTeam: { teamTricode: "TOR", score: 77 } },
+    { gameStatus: 1, gameStatusText: "7:30 pm ET", gameTimeUTC: iso, homeTeam: { teamTricode: "LAL" }, awayTeam: { teamTricode: "GSW" } },
+  ] } });
+  upstreams["statsapi.mlb.com"] = u => {
+    assert.equal(u.searchParams.get("date"), day);
+    const g = detailedState => ({ gameDate: iso, status: { abstractGameState: "Preview", detailedState }, teams: { home: { team: { id: 141 } }, away: { team: { id: 116 } } }, weather: { condition: "Roof Closed", temp: "68" } });
+    return Response.json({ dates: [{ games: [g("Scheduled"), g("Postponed")] }] });
+  };
+  const mon = new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", month: "short" }).format(new Date(now)), dd = +today.slice(8, 10);
+  const later = new Date(now + 20 * 864e5), laterMon = new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", month: "short" }).format(later), laterDay = +zoned(later).slice(8, 10);
+  const lighting = (m, d, title, name, fills) => `<article class="node node--type-lighting-event node--view-mode-teaser"><div class="date"> <span class="month">${m}</span> <span class="day">${d}</span> <span class="color-content">${name}</span></div><h3> <span class="field field--name-title field--type-string field--label-hidden">${title}</span></h3><div class="colour-bar"><svg>${fills.map(f => `<rect id="testing" fill="${f}" width="100%" height="50" x="0" y="0" />`).join("")}<rect id="grey-border" fill="#D0D2D9" width="15px" height="50" x="0" y="50" /></svg></div></article>`;
+  upstreams["www.cntower.ca"] = () => new Response(`<h2>Tonight</h2>${lighting(mon, dd, "Radon Action Month", "Purple", ["#8C35DE"])}${lighting(mon, dd, "Pride &amp; Remembrance", "Red and White", ["#ff0000", "#ffffff"])}${lighting(mon, dd, "Radon Action Month", "Purple", ["#8C35DE"])}<h2>Upcoming</h2>${lighting(laterMon, laterDay, "Far away", "Blue", ["#0000ff"])}`);
+  const row = (d, time, flight, place, status) => `<tr class='item ${d}' data-flightNo='${flight}'><td class='d-none d-lg-table-cell'>${d}</td><td>${time}</td><td class='d-none d-lg-table-cell'><svg class='icon porter-logo'><use xlink:href='#porter-logo'></use></svg></td><td>${flight}</td><td>${place}</td><td>${status}</td></tr>`;
+  upstreams["www.billybishopairport.com"] = u => new Response(u.pathname.includes("arrivals")
+    ? `<table id="flightsTable">${row("Today", "07:54", "PD2682", "Sault Ste Marie, ON", "Arrived")}${row("Today", "07:54", "TS7900", "Sault Ste Marie, ON", "Arrived")}${row("Today", "13:20", "PD2454", "Montreal-Trudeau, QC", "Cancelled")}${row("Tomorrow", "09:45", "PD2528", "Montreal-MET, QC", "On Time")}</table>`
+    : `<table id="flightsTable">${row("Today", "06:45", "PD2529", "New York-Newark, NJ", "Departed")}</table>`);
+  const h = k => Math.floor((now + k * 3600e3) / 1000);
+  upstreams["api.open-meteo.com"] = u => {
+    assert.equal(u.searchParams.get("timeformat"), "unixtime");
+    return Response.json({
+      hourly: { time: [h(-5), h(-4), h(-3), h(-2), h(-1), h(1)], snowfall: [0, 0.05, 0.3, 0.2, 0, 2], snow_depth: [0, 0, 0.01, 0.025, 0.03, 0.5] },
+      daily: { time: [h(-72), h(-48), h(-24), h(24)], temperature_2m_mean: [-20, -30, -25, -40] },
+    });
+  };
+
+  const sky = await (await call("/api/sky")).json();
+  assert.deepEqual(sky.games, [
+    { team: "leafs", home: true, start: Date.parse(iso), state: "final", won: true },
+    { team: "raptors", home: false, start: Date.parse(iso), state: "live", won: null },
+    { team: "jays", home: true, start: Date.parse(iso), state: "pre", won: null, roof: "closed" },
+  ]);
+  assert.deepEqual(sky.tower, { items: [
+    { md: `${+today.slice(5, 7)}-${dd}`, title: "Radon Action Month", name: "Purple", colors: ["#8c35de"] },
+    { md: `${+today.slice(5, 7)}-${dd}`, title: "Pride & Remembrance", name: "Red and White", colors: ["#ff0000", "#ffffff"] },
+  ] }, "tonight's lightings only, entities decoded, the grey border and duplicates dropped");
+  assert.deepEqual(sky.flights, {
+    arr: [{ t: torontoAt(today, "07:54"), place: "Sault Ste Marie" }, { t: torontoAt(tomorrow, "09:45"), place: "Montreal" }],
+    dep: [{ t: torontoAt(today, "06:45"), place: "New York" }],
+  }, "codeshares folded, cancelled flights dropped, toronto times");
+  assert.deepEqual(sky.lake, { firstSnow: h(-3) * 1000, snow: 3, ice: 0.5 }, "first measurable snow, depth now, ice from 75 freezing degree-days");
+
+  // one shared fetch per source, however many requests come in
+  await Promise.all(Array.from({ length: 5 }, () => call("/api/sky")));
+  for (const host of ["api-web.nhle.com", "www.cntower.ca", "api.open-meteo.com"]) assert.equal(calls[host], 1, host);
+  assert.equal(calls["www.billybishopairport.com"], 2, "arrivals and departures, once each");
+  // the old endpoint shares the games cache and keeps its old field for pages cached before /api/sky
+  const old = await (await call("/api/game")).json();
+  assert.equal(old.game, "leafs");
+  assert.equal(calls["api-web.nhle.com"], 1);
+});
+
+test("/api/sky: upstreams that fail or change shape leave nulls, never an error", async () => {
+  upstreams["www.cntower.ca"] = () => new Response("<html>redesigned</html>");
+  upstreams["www.billybishopairport.com"] = () => new Response("down", { status: 503 });
+  upstreams["api.open-meteo.com"] = () => Response.json({ error: true, reason: "nope" });
+  const res = await call("/api/sky");
+  assert.equal(res.status, 200);
+  const sky = await res.json();
+  assert.deepEqual(sky.games, []);
+  assert.equal(sky.tower, null);
+  assert.equal(sky.flights, null);
+  assert.deepEqual(sky.lake, { firstSnow: null, snow: 0, ice: 0 });
 });

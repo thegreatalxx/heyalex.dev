@@ -98,17 +98,122 @@ async function lastPush(env) {
   return e ? { repo: e.repo.name.split("/")[1], at: Date.parse(e.created_at) } : null;
 }
 
-async function game() {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(new Date());
-  try {
-    const j = await (await fetch("https://api-web.nhle.com/v1/club-schedule/TOR/week/now", { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })).json();
-    if ((j.games || []).some(g => g.gameDate === today)) return { game: "leafs" };
-  } catch (e) {}
-  try {
-    const j = await (await fetch("https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json", { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })).json();
-    if ((j?.scoreboard?.games || []).some(g => g.homeTeam?.teamTricode === "TOR" || g.awayTeam?.teamTricode === "TOR")) return { game: "raptors" };
-  } catch (e) {}
-  return { game: null };
+// ---- the waterfront's live data: game nights, cn tower lights, island flights, snow and harbour ice ----
+
+const TZ = "America/Toronto";
+const torontoDate = ms => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(ms));
+// utc ms for a toronto wall-clock time: read a utc guess back in toronto and shift by the difference
+function torontoMs(date, hh = 0, mm = 0) {
+  const guess = Date.parse(`${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    .formatToParts(new Date(guess)).map(x => [x.type, x.value]));
+  return 2 * guess - Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
+}
+const upstream = async url => {
+  const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
+  if (!r.ok) throw new Error(`${url} answered ${r.status}`);
+  return r;
+};
+const getJSON = async url => (await upstream(url)).json();
+const getText = async url => (await upstream(url)).text();
+const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", ndash: "–", mdash: "—" };
+const decode = s => String(s).replace(/<[^>]+>/g, "")
+  .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => e[0] !== "#" ? ENT[e.toLowerCase()] ?? m : String.fromCodePoint(/^#x/i.test(e) ? parseInt(e.slice(2), 16) : +e.slice(1)))
+  .replace(/\s+/g, " ").trim();
+
+// tonight's leafs, raptors and jays games: when, home or away, live state, and the result once it's final.
+// a game night runs until 4 am so a late final still counts. the jays' roof comes from mlb's game weather
+// ("Roof Closed") once it's posted; until then the page guesses from the weather.
+async function games(now = Date.now()) {
+  const day = torontoDate(now - 4 * 3600e3), out = [];
+  const [nhl, nba, mlb] = await Promise.allSettled([
+    getJSON(`https://api-web.nhle.com/v1/club-schedule/TOR/week/${day}`),
+    getJSON("https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"),
+    getJSON(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=141&date=${day}&hydrate=weather`),
+  ]);
+  const result = (state, us, them) => state === "final" && us != null && them != null ? us > them : null;
+  if (nhl.status === "fulfilled") for (const g of nhl.value?.games || []) {
+    if (g.gameDate !== day || (g.gameScheduleState && g.gameScheduleState !== "OK")) continue;
+    const home = g.homeTeam?.abbrev === "TOR", state = /^(FINAL|OFF)$/.test(g.gameState) ? "final" : /^(LIVE|CRIT)$/.test(g.gameState) ? "live" : "pre";
+    const [us, them] = home ? [g.homeTeam?.score, g.awayTeam?.score] : [g.awayTeam?.score, g.homeTeam?.score];
+    out.push({ team: "leafs", home, start: Date.parse(g.startTimeUTC) || null, state, won: result(state, us, them) });
+  }
+  const sb = nba.status === "fulfilled" ? nba.value?.scoreboard : null;
+  if (sb?.gameDate === day) for (const g of sb.games || []) {
+    const home = g.homeTeam?.teamTricode === "TOR";
+    if ((!home && g.awayTeam?.teamTricode !== "TOR") || /ppd|postp|cancel/i.test(g.gameStatusText || "")) continue;
+    const state = g.gameStatus === 3 ? "final" : g.gameStatus === 2 ? "live" : "pre";
+    const [us, them] = home ? [g.homeTeam?.score, g.awayTeam?.score] : [g.awayTeam?.score, g.homeTeam?.score];
+    out.push({ team: "raptors", home, start: Date.parse(g.gameTimeUTC) || null, state, won: result(state, us, them) });
+  }
+  if (mlb.status === "fulfilled") for (const d of mlb.value?.dates || []) for (const g of d.games || []) {
+    if (/postponed|cancel|suspended/i.test(g.status?.detailedState || "")) continue;
+    const home = g.teams?.home?.team?.id === 141, ab = g.status?.abstractGameState;
+    const state = ab === "Final" ? "final" : ab === "Live" ? "live" : "pre", cond = String(g.weather?.condition || "");
+    out.push({ team: "jays", home, start: Date.parse(g.gameDate) || null, state,
+      won: state === "final" ? !!(home ? g.teams.home : g.teams.away)?.isWinner : null,
+      roof: home && cond ? (/roof closed|dome/i.test(cond) ? "closed" : "open") : null });
+  }
+  // `game` keeps the old shape for pages cached before /api/sky existed
+  const first = out.find(g => g.team !== "jays");
+  return { game: first ? first.team : null, games: out };
+}
+
+// the cn tower's lighting schedule page lists previous, tonight's and upcoming lightings. items carry the
+// night they belong to ("11-25"); the page shows tonight's (a night lasts until 6 am) and rotates through them.
+const MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Sept: 9, Oct: 10, Nov: 11, Dec: 12 };
+async function towerLights(now = Date.now()) {
+  const h = await getText("https://www.cntower.ca/lighting-schedule");
+  const near = new Set([-1, 0, 1, 2].map(k => { const d = torontoDate(now + k * 864e5); return `${+d.slice(5, 7)}-${+d.slice(8, 10)}`; }));
+  const items = [], seen = new Set();
+  for (const [art] of h.matchAll(/<article[^>]*node--type-lighting-event[\s\S]*?<\/article>/g)) {
+    const mon = MONTHS[/class="month">\s*([A-Za-z]+)/.exec(art)?.[1]], day = +(/class="day">\s*(\d+)/.exec(art)?.[1]);
+    const md = `${mon}-${day}`, title = decode(/field--name-title[^>]*>([\s\S]*?)<\/span>/.exec(art)?.[1] || "");
+    const colors = [...art.matchAll(/<rect(?![^>]*grey-border)[^>]*fill="(#(?:[0-9a-f]{6}|[0-9a-f]{3}))"/gi)].map(m => m[1].toLowerCase());
+    if (!mon || !day || !near.has(md) || !colors.length || seen.has(md + title)) continue;
+    seen.add(md + title);
+    items.push({ md, title: title.slice(0, 120), name: decode(/class="color-content">([\s\S]*?)<\/span>/.exec(art)?.[1] || "").slice(0, 60), colors: colors.slice(0, 6) });
+  }
+  return items.length ? { items } : null;
+}
+
+// billy bishop's arrivals and departures boards (today and tomorrow) as utc ms. the same flight sold under
+// porter and air transat numbers is folded into one; cancelled flights are dropped.
+async function ytzFlights(now = Date.now()) {
+  const [arr, dep] = await Promise.all(["arrivals", "departures"].map(k => getText(`https://www.billybishopairport.com/flights/${k}/`)));
+  const days = { Today: torontoDate(now), Tomorrow: torontoDate(now + 864e5) };
+  const board = html => {
+    const out = [], seen = new Set();
+    for (const [, day, row] of html.matchAll(/<tr class=['"]item (Today|Tomorrow)['"][^>]*>([\s\S]*?)<\/tr>/g)) {
+      // cells: day, time, airline logo, flight, city, status
+      const td = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(m => decode(m[1]));
+      // "Montreal-Trudeau, QC" -> "Montreal", "New York-Newark, NJ" -> "New York"
+      const tm = /^(\d{1,2}):(\d{2})$/.exec(td[1] || ""), place = (td[4] || "").replace(/,\s*[A-Z]{2}$/, "").replace(/\s*-.*$/, "").slice(0, 40);
+      if (!tm || !place || /cancel/i.test(td[5] || "") || seen.has(day + td[1] + place)) continue;
+      seen.add(day + td[1] + place);
+      out.push({ t: torontoMs(days[day], +tm[1], +tm[2]), place });
+    }
+    return out.sort((a, b) => a.t - b.t);
+  };
+  return { arr: board(arr), dep: board(dep) };
+}
+
+// snow and harbour ice from open-meteo's last 92 days over the waterfront. firstSnow is the first hour this
+// winter (since sept 1) with measurable snowfall, snow is the depth on the ground now in cm, and ice (0..1)
+// grows with freezing degree-days and melts twice as fast on mild days. a winter whose first snow fell more
+// than 92 days ago reads as its earliest snow in the window, which is fine: the page only cares about today.
+async function lake(now = Date.now()) {
+  const j = await getJSON("https://api.open-meteo.com/v1/forecast?latitude=43.64&longitude=-79.38&hourly=snowfall,snow_depth&daily=temperature_2m_mean&past_days=92&forecast_days=1&timezone=America%2FToronto&timeformat=unixtime");
+  const d = torontoDate(now), y = +d.slice(0, 4), winter = torontoMs(`${+d.slice(5, 7) >= 9 ? y : y - 1}-09-01`);
+  const ht = j?.hourly?.time || [], sf = j?.hourly?.snowfall || [], sd = j?.hourly?.snow_depth || [];
+  let firstSnow = null, depth = 0, fdd = 0;
+  for (let i = 0; i < ht.length && ht[i] * 1000 <= now; i++) {
+    if (firstSnow === null && ht[i] * 1000 >= winter && sf[i] >= 0.1) firstSnow = ht[i] * 1000;
+    if (typeof sd[i] === "number") depth = sd[i];
+  }
+  const dt = j?.daily?.time || [], mean = j?.daily?.temperature_2m_mean || [];
+  for (let i = 0; i < dt.length && dt[i] * 1000 <= now; i++) if (typeof mean[i] === "number") fdd = Math.max(0, fdd - (mean[i] < 0 ? mean[i] : 2 * mean[i]));
+  return { firstSnow, snow: Math.round(depth * 1000) / 10, ice: Math.round(Math.min(1, Math.max(0, (fdd - 25) / 100)) * 100) / 100 };
 }
 
 // sun altitude over toronto -> which pre-rendered preview to serve
@@ -229,7 +334,15 @@ export default {
     }
 
     if (p === "/api/push" && m === "GET") return json(await cached(ctx, "push", 300, () => lastPush(env)));
-    if (p === "/api/game" && m === "GET") return json(await cached(ctx, "game", 3600, game));
+    if (p === "/api/game" && m === "GET") return json(await cached(ctx, "games", 300, games));
+    // everything the waterfront scene draws from the real world, in one request; each source caches on its own
+    if (p === "/api/sky" && m === "GET") {
+      const [g, tower, flights, lk] = await Promise.all([
+        cached(ctx, "games", 300, games), cached(ctx, "tower", 3 * 3600, towerLights),
+        cached(ctx, "flights", 600, ytzFlights), cached(ctx, "lake", 1800, lake),
+      ]);
+      return json({ games: g?.games || [], tower, flights, lake: lk });
+    }
     if (p.startsWith("/api/asset/") && m === "PUT") {
       if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
