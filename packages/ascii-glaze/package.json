@@ -1,0 +1,18 @@
+{
+  "name": "ascii-glaze",
+  "version": "0.1.0",
+  "description": "Draw any image, video or canvas as coloured ASCII on a canvas. The renderer behind heyalex.dev's skyline.",
+  "type": "module",
+  "main": "index.js",
+  "exports": "./index.js",
+  "files": ["index.js", "README.md", "LICENSE"],
+  "keywords": ["ascii", "ascii-art", "canvas", "image", "video", "generative"],
+  "author": "Alexander Wondwossen (https://heyalex.dev)",
+  "license": "MIT",
+  "homepage": "https://heyalex.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thegreatalxx/heyalex.dev.git",
+    "directory": "packages/ascii-glaze"
+  }
+}

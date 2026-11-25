@@ -79,6 +79,12 @@ function refresh(ctx, cache, req, key, ttl, fn) {
   }
   return p;
 }
+// writes a known-new value into this location's cache, so whoever just changed it sees it at once
+// (other locations catch up within their ttl)
+function prime(ctx, key, ttl, v) {
+  const req = new Request("https://cache.heyalex.dev/v2/" + key);
+  ctx.waitUntil(caches.default.put(req, new Response(JSON.stringify({ v, exp: Date.now() + ttl * 1000 }), { headers: { "cache-control": `max-age=${2 * ttl}` } })).catch(() => {}));
+}
 // a slow upstream must not hold requests (or the shared refresh) open
 const UPSTREAM_TIMEOUT = 5000;
 
@@ -109,12 +115,12 @@ function torontoMs(date, hh = 0, mm = 0) {
     .formatToParts(new Date(guess)).map(x => [x.type, x.value]));
   return 2 * guess - Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
 }
-const upstream = async url => {
-  const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
+const upstream = async (url, headers = UA) => {
+  const r = await fetch(url, { headers, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) });
   if (!r.ok) throw new Error(`${url} answered ${r.status}`);
   return r;
 };
-const getJSON = async url => (await upstream(url)).json();
+const getJSON = async (url, headers) => (await upstream(url, headers)).json();
 const getText = async url => (await upstream(url)).text();
 const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", ndash: "–", mdash: "—" };
 const decode = s => String(s).replace(/<[^>]+>/g, "")
@@ -196,6 +202,22 @@ async function ytzFlights(now = Date.now()) {
     return out.sort((a, b) => a.t - b.t);
   };
   return { arr: board(arr), dep: board(dep) };
+}
+
+// the commit rain and the repo fish: public repos pushed to in the last 30 days (newest first) and the
+// subject lines of my recent commits in the top three. github's events feed stopped carrying commit
+// messages, so those come from each repo's commit list. only public repos ever show up here.
+async function github(env) {
+  const headers = { ...UA, accept: "application/vnd.github+json", ...(env.GH_TOKEN ? { authorization: "Bearer " + env.GH_TOKEN } : {}) };
+  const since = Date.now() - 30 * 864e5, repos = [];
+  for (const e of await getJSON(`https://api.github.com/users/${env.GH_USER}/events/public?per_page=100`, headers))
+    if (e.type === "PushEvent" && Date.parse(e.created_at) >= since && !repos.includes(e.repo?.name)) repos.push(e.repo.name);
+  const lists = await Promise.allSettled(repos.slice(0, 3).map(r =>
+    getJSON(`https://api.github.com/repos/${r}/commits?per_page=12&author=${encodeURIComponent(env.GH_USER)}&since=${new Date(since).toISOString()}`, headers)));
+  const messages = [];
+  for (const l of lists) if (l.status === "fulfilled" && Array.isArray(l.value))
+    for (const c of l.value) { const m = String(c?.commit?.message || "").split("\n")[0].trim(); if (m) messages.push(m.slice(0, 80)); }
+  return { repos: repos.slice(0, 8).map(r => r.split("/")[1]), messages: messages.slice(0, 36) };
 }
 
 // snow and harbour ice from open-meteo's last 92 days over the waterfront. firstSnow is the first hour this
@@ -289,8 +311,60 @@ function pageHTML(pg) {
   return h.slice(0, a) + main + h.slice(b);
 }
 
+// résumé mode: one fast page for people hiring, built from the same data as the site (the resume-data block
+// and the project list in index.html), so it never drifts from what the home page says
+const RDATA = JSON.parse(HTML.match(/<script type="application\/json" id="resume-data">([\s\S]*?)<\/script>/)[1]);
+const RESUME_CSS = ':root{--bg:#07080e;--fg:#ecebe6;--dim:#8a8a96;--line:#22232c;--accent:#7dff9a;color-scheme:dark}*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--fg);font:14px/1.7 "JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace}main{max-width:720px;margin:0 auto;padding:56px 20px 64px}h1{font-size:22px;font-weight:500;margin:0}h2{font-size:14px;font-weight:500;margin:36px 0 10px}h2:before{content:"## ";color:var(--dim)}h3{font-size:14px;font-weight:500;margin:0;display:flex;gap:10px;align-items:baseline}h3 span{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-4px)}h3 small{color:var(--dim);font-size:14px}p{margin:0}.dim,.role{color:var(--dim)}.open{margin-top:14px;display:inline-flex;gap:10px;align-items:center;border:1px solid var(--line);padding:4px 10px}.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}.lead{margin-top:18px;max-width:62ch}dl{display:grid;grid-template-columns:12ch minmax(0,1fr);gap:4px 16px;margin:24px 0 0}dt{color:var(--dim)}dd{margin:0}article{padding:10px 0;border-bottom:1px dashed var(--line)}article p{margin-top:2px}a{color:inherit;text-decoration:none;border-bottom:1px solid #3a3b48}a:hover{border-color:var(--fg)}:focus-visible{outline:1px solid var(--fg);outline-offset:3px}footer{margin-top:40px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;color:var(--dim)}button{font:inherit;color:var(--dim);background:none;border:1px solid #3a3b48;padding:4px 10px;cursor:pointer}button:hover{color:var(--fg);border-color:var(--fg)}@media (max-width:560px){dl{grid-template-columns:minmax(0,1fr)}dt{margin-top:8px}}@media print{:root{--bg:#fff;--fg:#000;--dim:#444;--line:#bbb;--accent:#0a0}body{font-size:11px}main{padding:0}footer{display:none}a{border:0}.open{border-color:#bbb}}';
+function resumeHTML() {
+  const r = RDATA, work = r.work.map(id => PDATA.find(p => p.id === id)).filter(Boolean);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Résumé · ${esc(r.name)}</title><meta name="description" content="${esc(r.summary)}"><link rel="canonical" href="https://heyalex.dev/resume"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"><style>${RESUME_CSS}</style></head><body><main>` +
+    `<h1>${esc(r.name)}</h1><p class="role">${esc(r.role)} · ${esc(r.place)}</p><p class="open"><span class="dot" aria-hidden="true"></span>${esc(r.looking)}</p>` +
+    `<p class="lead">${esc(r.summary)}</p>` +
+    `<dl>${r.facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}${r.links.map(([k, href, label]) => `<dt>${esc(k)}</dt><dd><a href="${esc(href)}">${esc(label)}</a></dd>`).join("")}</dl>` +
+    `<h2>Selected work</h2>${work.map(p => `<article><h3><a href="/work/${esc(p.id)}">${esc(p.n)}</a><span></span><small>${esc(p.y)}</small></h3><p>${esc(p.d)}</p><p class="dim">${esc(p.stack)}${p.built ? ` · Built at the ${esc(p.built)}` : ""}</p></article>`).join("")}` +
+    `<footer><a href="/?awake">← The waterfront</a><button type="button" id="print">Save as PDF</button><span>${esc(r.replies)}</span></footer>` +
+    `</main><script>document.getElementById("print").addEventListener("click",()=>print())</script></body></html>`;
+}
+const RESUME_HTML = resumeHTML();
+let RESUME_CSP_PROMISE;
+
+// the cats' pet counter is shared by everyone. kv takes few writes, so each isolate batches pets in memory and
+// writes them at most every five minutes (or every 50 pets); a visitor adds at most one pet a second.
+const PETS = { base: null, at: 0, pending: 0, flushed: 0 }, PETTED = new Map();
+async function petCount(env) {
+  if (PETS.base === null || Date.now() - PETS.at > 60e3) {
+    PETS.base = Number(await env.STATUS.get("pets")) || 0;
+    PETS.at = Date.now();
+  }
+  return PETS.base + PETS.pending;
+}
+async function flushPets(env) {
+  const add = PETS.pending;
+  if (!add) return;
+  PETS.pending = 0;
+  PETS.flushed = Date.now();
+  try {
+    const now = (Number(await env.STATUS.get("pets")) || 0) + add;
+    await env.STATUS.put("pets", String(now));
+    PETS.base = now;
+    PETS.at = Date.now();
+  } catch (e) { PETS.pending += add; }
+}
+
+// the photo manifest the uploader sends: ids, titles, dates and a camera-settings line, nothing else
+function photoManifest(b) {
+  if (!Array.isArray(b) || b.length > 60) return null;
+  const str = (v, n) => typeof v === "string" ? v.slice(0, n) : "";
+  const out = [];
+  for (const x of b) {
+    if (!x || typeof x !== "object" || !/^[a-z0-9-]{1,40}$/.test(x.id)) return null;
+    out.push({ id: x.id, title: str(x.title, 80), date: str(x.date, 20), exif: str(x.exif, 100), w: Math.max(0, Math.min(10000, Math.round(Number(x.w)) || 0)), h: Math.max(0, Math.min(10000, Math.round(Number(x.h)) || 0)) });
+  }
+  return out;
+}
+
 // the page with its header hidden and a name card on top, screenshotted/recorded for link previews
-const OG_CSS = '<style>.top,.col{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
+const OG_CSS = '<style>.top,.col,.ctl,.open,#gate{display:none!important}body:after{content:"";position:fixed;left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78));z-index:40}.ogc{position:fixed;left:64px;bottom:58px;z-index:50;font-family:"JetBrains Mono",ui-monospace,monospace;text-shadow:0 0 14px #000,0 0 28px #000}.ogc .n{font-size:58px;font-weight:500;color:#efede8;letter-spacing:-.5px}.ogc .d{font-size:23px;color:#d2cdc3;margin-top:10px}.ogc .u{font-size:23px;color:#ffb04d;margin-top:20px}</style>';
 const OG_BODY = '<div class="ogc"><div class="n">Alexander Wondwossen</div><div class="d">AI tools · Apple apps · hardware that talks to AI agents</div><div class="u">heyalex.dev</div></div><script>addEventListener("load",()=>setTimeout(()=>{const p=new URLSearchParams(location.search).get("p")||"set",b=["rise","noon","set","dusk","night","live"].includes(p)&&document.querySelector(\'#preview [data-p="\'+p+\'"]\');b&&b.click()},200))</script>';
 const OG_HTML = HTML.replace("</head>", () => OG_CSS + "</head>").replace("</body>", () => OG_BODY + "</body>");
 const noindex = { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "no-store" };
@@ -337,16 +411,42 @@ export default {
     if (p === "/api/game" && m === "GET") return json(await cached(ctx, "games", 300, games));
     // everything the waterfront scene draws from the real world, in one request; each source caches on its own
     if (p === "/api/sky" && m === "GET") {
-      const [g, tower, flights, lk] = await Promise.all([
+      const [g, tower, flights, lk, gh] = await Promise.all([
         cached(ctx, "games", 300, games), cached(ctx, "tower", 3 * 3600, towerLights),
         cached(ctx, "flights", 600, ytzFlights), cached(ctx, "lake", 1800, lake),
+        cached(ctx, "github", 1800, () => github(env)),
       ]);
-      return json({ games: g?.games || [], tower, flights, lake: lk });
+      return json({ games: g?.games || [], tower, flights, lake: lk, github: gh });
+    }
+
+    // the cats' shared pet counter
+    if (p === "/api/pets" && m === "GET") return json({ count: await petCount(env) });
+    if (p === "/api/pets" && m === "POST") {
+      const ip = req.headers.get("cf-connecting-ip") || "anon", now = Date.now();
+      if (now - (PETTED.get(ip) || 0) < 900) return json({ count: await petCount(env), counted: false }, 429);
+      if (PETTED.size > 5000) PETTED.clear();
+      PETTED.set(ip, now);
+      PETS.pending++;
+      const count = await petCount(env);
+      if (now - PETS.flushed > 300e3 || PETS.pending >= 50) ctx.waitUntil(flushPets(env));
+      return json({ count, counted: true });
+    }
+
+    // the photo contact sheet: a manifest and the photos themselves live in kv (tools/photos.py uploads them)
+    if (p === "/api/photos" && m === "GET") return json(await cached(ctx, "photos", 300, async () => (await env.STATUS.get("photos", "json")) || []) || []);
+    if (p === "/api/photos" && m === "PUT") {
+      if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
+      let b; try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400); }
+      const list = photoManifest(b);
+      if (!list) return json({ error: "bad manifest" }, 400);
+      await env.STATUS.put("photos", JSON.stringify(list));
+      prime(ctx, "photos", 300, list);
+      return json({ ok: true, photos: list.length });
     }
     if (p.startsWith("/api/asset/") && m === "PUT") {
       if (!(await authedUpload(req, env))) return json({ error: "unauthorized" }, 401);
       const name = p.slice(11);
-      if (!/^og-(rise|noon|set|dusk|night)\.(mp4|jpg)$/.test(name)) return json({ error: "bad name" }, 400);
+      if (!/^(og-(rise|noon|set|dusk|night)\.(mp4|jpg)|photo-[a-z0-9-]{1,40}\.jpg)$/.test(name)) return json({ error: "bad name" }, 400);
       // refuse a declared oversize body before buffering it; the length check after reading still covers chunked uploads
       if (Number(req.headers.get("content-length")) > 4e6) return json({ error: "too big" }, 413);
       const body = await req.arrayBuffer();
@@ -372,6 +472,13 @@ export default {
       }
       return new Response(m === "HEAD" ? null : buf, { headers: { ...base, "content-length": String(size) } });
     }
+    // photos for the contact sheet, uploaded already resized and stripped of their metadata
+    const photo = /^\/photo\/([a-z0-9-]{1,40})\.jpg$/.exec(p);
+    if (photo) {
+      const buf = await env.STATUS.get("asset:photo-" + photo[1] + ".jpg", "arrayBuffer");
+      if (!buf) return new Response("not found", { status: 404 });
+      return new Response(m === "HEAD" ? null : buf, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" } });
+    }
     // real project screenshots (from each repo's readme), drawn as ascii by the page
     const shot = /^\/p\/(mono|aether|exif)\.jpg$/.exec(p);
     if (shot) {
@@ -390,12 +497,14 @@ export default {
 
     if (p === "/" || p === "/index.html")
       return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
+    if (p === "/resume" || p === "/resume/")
+      return new Response(m === "HEAD" ? null : RESUME_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await (RESUME_CSP_PROMISE ||= cspFor(RESUME_HTML)), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
     if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const pgm = /^\/([a-z-]+)\/?$/.exec(p), pgd = pgm && PGDATA.find(x => x.id === pgm[1]);
     if (pgd) return new Response(m === "HEAD" ? null : pageHTML(pgd), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
-    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
+    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url><url><loc>https://heyalex.dev/resume</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(m === "HEAD" ? null : NOT_FOUND, { status: 404, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300", "content-security-policy": NOT_FOUND_CSP, ...SEC } });
   },

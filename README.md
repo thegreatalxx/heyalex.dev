@@ -11,10 +11,36 @@ one cloudflare worker serves everything:
   - the cn tower's lighting schedule (cntower.ca): tonight's colours and what they're for, rainbow at the bottom of each hour
   - billy bishop's arrivals and departures boards: planes land over the harbour and take off on the real times
   - snow and ice (open-meteo, last 92 days): the first snow of the winter, snow on the roofs and seawall, and harbour ice from freezing degree-days, which the lake dive sees from below
+  - github: repos i pushed to in the last 30 days and my recent commit subject lines. when it rains, the rain is those words; the labelled fish in the lake dive are those repos
+- `/resume` résumé mode: one fast, printable page for people hiring, built from the `resume-data` block and the project list in `src/index.html`
+- `/api/pets` the cats' shared pet counter (kv key `pets`, batched so kv sees a write every few minutes at most)
+- `/api/photos`, `/photo/<id>.jpg` the photo contact sheet (see below)
 - `/api/push` last push; `/api/game` the old games endpoint, kept for cached pages
 - `/og.mp4`, `/og.jpg` link previews, picked by where the sun is over toronto right now
 
 the page also knows the ward's island ferry timetable (city of toronto, winter 2026-27, plus the spring and summer evening trips), new year's eve (dec 27 to jan 1, with a countdown and a show at midnight), and the geminid and perseid meteor showers on clear nights.
+
+## the opening
+
+a first visit to `/` starts with the city asleep: tap a sleeping cat (or press enter) and it wakes, the windows light up and the sky runs forward to the real time. it shows once per browser. project pages, `/resume`, links with a `#section`, `/?awake`, link previews and anyone without javascript skip it.
+
+## on the page
+
+- top right: pet a cat (also by clicking one), pause (remembered, and on by default with reduced motion), and the art style: ascii, pixel, dots, or life (conway's game of life on the lake; click the lake to seed it)
+- the "open to work" sign on the seawall goes to résumé mode
+- a pixel alex sits on the seawall to match the status line: coding (laptop light), listening (headphones), up early (coffee). away or asleep, the spot is empty
+
+## photos
+
+```bash
+STATUS_TOKEN=... python3 tools/photos.py ~/Pictures/for-the-site
+```
+
+turns each photo upright, resizes it to 1600 px and re-encodes it with no metadata at all (no gps), keeps one line of camera settings, uploads the set and replaces the list. needs pillow (`pip3 install --user Pillow`). the photos section stays hidden until there's at least one photo.
+
+## ascii-glaze
+
+`packages/ascii-glaze` is the renderer behind the skyline as a tiny mit library (the photo sheet inlines the same code). to publish it: `cd packages/ascii-glaze && npm publish`.
 
 ## run it
 

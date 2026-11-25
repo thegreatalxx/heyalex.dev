@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ascii-glaze demo</title>
+<style>
+  :root { color-scheme: dark }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #07080e; color: #ecebe6; font: 14px/1.6 ui-monospace, Menlo, monospace }
+  main { width: min(960px, 92vw) }
+  canvas { display: block; width: 100%; aspect-ratio: 16 / 9; background: #05060a; border: 1px solid #22232c }
+  label { display: inline-block; margin-top: 12px; color: #8a8a96; cursor: pointer }
+  input { display: none }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="out"></canvas>
+  <label>drop an image or a video anywhere, or <u>pick one</u><input id="pick" type="file" accept="image/*,video/*"></label>
+</main>
+<script type="module">
+  import { asciify, animate } from "./index.js";
+  const out = document.getElementById("out");
+  let stop = null;
+
+  // starts with a little generated scene so there's something to look at
+  const scene = document.createElement("canvas");
+  scene.width = 320; scene.height = 180;
+  const g = scene.getContext("2d");
+  stop = animate(out, scene, {
+    draw: t => {
+      const sky = g.createLinearGradient(0, 0, 0, 180);
+      sky.addColorStop(0, "#161a46"); sky.addColorStop(1, "#ff6e30");
+      g.fillStyle = sky; g.fillRect(0, 0, 320, 180);
+      g.fillStyle = "#ffd08a"; g.beginPath(); g.arc(160, 120 - Math.sin(t / 3) * 30, 22, 0, 7); g.fill();
+      g.fillStyle = "#170b12";
+      for (let x = 0; x < 320; x += 18) g.fillRect(x, 140 - ((x * 37) % 60), 14, 60);
+    },
+  });
+
+  const show = file => {
+    if (stop) stop();
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith("video/")) {
+      const v = Object.assign(document.createElement("video"), { src: url, muted: true, loop: true, playsInline: true });
+      v.play();
+      stop = animate(out, v, { fps: 20 });
+    } else {
+      const img = new Image();
+      img.onload = () => asciify(out, img);
+      img.src = url;
+      stop = null;
+    }
+  };
+  document.getElementById("pick").addEventListener("change", e => e.target.files[0] && show(e.target.files[0]));
+  addEventListener("dragover", e => e.preventDefault());
+  addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer.files[0]; f && show(f); });
+</script>
+</body>
+</html>
