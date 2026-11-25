@@ -368,3 +368,74 @@ test("/api/sky: upstreams that fail or change shape leave nulls, never an error"
   assert.equal(sky.flights, null);
   assert.deepEqual(sky.lake, { firstSnow: null, snow: 0, ice: 0 });
 });
+
+// ---- résumé mode, the cats' pet counter, photos, and the commit rain ----
+
+test("/resume: résumé mode is built from the site's own data, with a csp for its one script", async () => {
+  const res = await call("/resume");
+  assert.equal(res.status, 200);
+  const body = await res.text(), csp = res.headers.get("content-security-policy");
+  const R = JSON.parse(/id="resume-data">([\s\S]*?)<\/script>/.exec(HTML)[1]);
+  assert.ok(body.includes(R.name) && body.includes(R.looking) && body.includes('href="mailto:hi@heyalex.dev"'));
+  for (const id of R.work) {
+    assert.ok(PROJECTS.some(p => p.id === id), `${id} is a real project`);
+    assert.ok(body.includes(`href="/work/${id}"`), `${id} is listed`);
+  }
+  for (const h of scriptHashes(body)) assert.ok(csp.includes(h), "csp allows the print button script");
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
+  assert.equal((await call("/resume/")).status, 200);
+  assert.ok((await (await call("/sitemap.xml")).text()).includes("<loc>https://heyalex.dev/resume</loc>"));
+});
+
+test("/api/pets: one shared counter, one pet a second per visitor, batched into kv", async () => {
+  const pet = ip => call("/api/pets", { method: "POST", headers: { "cf-connecting-ip": ip } });
+  const before = (await (await call("/api/pets")).json()).count;
+  const first = await pet("198.51.100.1");
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).count, before + 1);
+  assert.equal(env.STATUS.m.get("pets"), String(before + 1), "the first pet in a while is written straight away");
+  assert.equal((await pet("198.51.100.1")).status, 429, "the same visitor again within a second isn't counted");
+  assert.equal((await (await pet("198.51.100.2")).json()).count, before + 2);
+  assert.equal(env.STATUS.m.get("pets"), String(before + 1), "the next pets wait for the batch");
+  skew += 301e3;
+  assert.equal((await (await pet("198.51.100.3")).json()).count, before + 3);
+  assert.equal(env.STATUS.m.get("pets"), String(before + 3), "five minutes later the batch is written");
+  assert.equal((await (await call("/api/pets")).json()).count, before + 3);
+});
+
+test("photos: the manifest and uploads need the token, the manifest is cleaned, photos are served", async () => {
+  const put = (body, auth) => call("/api/photos", { method: "PUT", headers: auth ? { authorization: "Bearer " + STATUS_TOKEN } : {}, body });
+  assert.equal((await put("[]")).status, 401);
+  assert.equal((await put(JSON.stringify([{ id: "../etc" }]), true)).status, 400, "ids are slugs");
+  assert.equal((await put("{}", true)).status, 400);
+  const photo = { id: "harbour-1", title: "Harbour", date: "2026-06-01", exif: "Nikon D7200 · 35 mm · f/1.8", w: 1600, h: 1067 };
+  assert.equal((await put(JSON.stringify([{ ...photo, gps: "43.64,-79.38", note: "x" }]), true)).status, 200);
+  assert.deepEqual(JSON.parse(env.STATUS.m.get("photos")), [photo], "anything else, like gps, is dropped");
+  assert.deepEqual(await (await call("/api/photos")).json(), [photo]);
+  const fakeReq = (name, readBody) => ({ url: `https://heyalex.dev/api/asset/${name}`, method: "PUT", headers: new Headers({ authorization: "Bearer " + STATUS_TOKEN }), arrayBuffer: readBody });
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  assert.equal((await worker.fetch(fakeReq("photo-harbour-1.jpg", async () => jpg.buffer), env, { waitUntil() {} })).status, 200);
+  assert.equal((await worker.fetch(fakeReq("photo-../x.jpg", async () => jpg.buffer), env, { waitUntil() {} })).status, 400);
+  const got = await call("/photo/harbour-1.jpg");
+  assert.equal(got.headers.get("content-type"), "image/jpeg");
+  assert.deepEqual([...new Uint8Array(await got.arrayBuffer())], [...jpg]);
+  assert.equal((await call("/photo/nope.jpg")).status, 404);
+});
+
+test("/api/sky github: repos pushed to this month and the subject lines of their commits", async () => {
+  const day = 864e5, at = ms => new Date(Date.now() - ms).toISOString();
+  upstreams["api.github.com"] = u => {
+    if (u.pathname === "/users/u/events/public") return Response.json([
+      { type: "PushEvent", created_at: at(3600e3), repo: { name: "u/kept" } },
+      { type: "WatchEvent", created_at: at(3600e3), repo: { name: "u/starred" } },
+      { type: "PushEvent", created_at: at(2 * day), repo: { name: "u/heyalex.dev" } },
+      { type: "PushEvent", created_at: at(3 * day), repo: { name: "u/kept" } },
+      { type: "PushEvent", created_at: at(40 * day), repo: { name: "u/old" } },
+    ]);
+    assert.equal(u.searchParams.get("author"), "u");
+    if (u.pathname === "/repos/u/kept/commits") return Response.json([{ commit: { message: "Ship the menu bar app\n\nlong body" } }, { commit: { message: "Fix sync" } }]);
+    return new Response("nope", { status: 500 });
+  };
+  const sky = await (await call("/api/sky")).json();
+  assert.deepEqual(sky.github, { repos: ["kept", "heyalex.dev"], messages: ["Ship the menu bar app", "Fix sync"] }, "newest first, pushes only, last 30 days, a failing repo is skipped");
+});
