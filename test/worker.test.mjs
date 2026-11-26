@@ -377,6 +377,7 @@ test("/resume: résumé mode is built from the site's own data, with a csp for i
   const body = await res.text(), csp = res.headers.get("content-security-policy");
   const R = JSON.parse(/id="resume-data">([\s\S]*?)<\/script>/.exec(HTML)[1]);
   assert.ok(body.includes(R.name) && body.includes(R.looking) && body.includes('href="mailto:hi@heyalex.dev"'));
+  for (const s of PAGES.find(p => p.id === "business").sections) assert.ok(body.includes(s.p.replace(/&/g, "&amp;")),`the ${s.h} venture is listed word for word`);
   for (const id of R.work) {
     assert.ok(PROJECTS.some(p => p.id === id), `${id} is a real project`);
     assert.ok(body.includes(`href="/work/${id}"`), `${id} is listed`);

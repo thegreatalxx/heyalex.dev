@@ -20,14 +20,13 @@ one cloudflare worker serves everything:
 
 the page also knows the ward's island ferry timetable (city of toronto, winter 2026-27, plus the spring and summer evening trips), new year's eve (dec 27 to jan 1, with a countdown and a show at midnight), and the geminid and perseid meteor showers on clear nights.
 
-## the opening
-
-a first visit to `/` starts with the city asleep: tap a sleeping cat (or press enter) and it wakes, the windows light up and the sky runs forward to the real time. it shows once per browser. project pages, `/resume`, links with a `#section`, `/?awake`, link previews and anyone without javascript skip it.
-
 ## on the page
 
-- top right: pet a cat (also by clicking one), pause (remembered, and on by default with reduced motion), and the art style: ascii, pixel, dots, or life (conway's game of life on the lake; click the lake to seed it)
+- the header is just the name, a link to résumé mode, and the live status line
+- click a cat to pet it: it purrs and a `<3` floats up with the shared count
+- "pause the animation" is in the footer (remembered, and on by default with reduced motion)
 - the "open to work" sign on the seawall goes to résumé mode
+- other art styles (pixel, dots, life) are in the hidden preview controls in the footer, next to weather, season and events
 - a pixel alex sits on the seawall to match the status line: coding (laptop light), listening (headphones), up early (coffee). away or asleep, the spot is empty
 
 ## photos
