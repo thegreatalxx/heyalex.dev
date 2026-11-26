@@ -440,3 +440,20 @@ test("/api/sky github: repos pushed to this month and the subject lines of their
   const sky = await (await call("/api/sky")).json();
   assert.deepEqual(sky.github, { repos: ["kept", "heyalex.dev"], messages: ["Ship the menu bar app", "Fix sync"] }, "newest first, pushes only, last 30 days, a failing repo is skipped");
 });
+
+test("school: the home page and résumé show education once resume-data has it, and not before", async () => {
+  const R = JSON.parse(/id="resume-data">([\s\S]*?)<\/script>/.exec(HTML)[1]);
+  const home = await (await call("/")).text(), resume = await (await call("/resume")).text();
+  const e = R.education, html = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  if (e && (e.where || e.level)) {
+    const name = [e.level, e.where].filter(Boolean).join(", ");
+    assert.ok(home.includes('<section id="school">') && !home.includes('<section id="school" hidden'), "the school section is shown");
+    assert.ok(home.includes(html(name)) && resume.includes("<h2>Education</h2>") && resume.includes(html(name)));
+    for (const [k, v] of e.items || []) assert.ok(home.includes(html(k)) && home.includes(html(v)) && resume.includes(html(k)), k);
+    const page = await (await call(`/work/${PROJECTS[0].id}`)).text();
+    assert.ok(page.includes('<section id="school" hidden>'), "project pages still hide it");
+  } else {
+    assert.ok(home.includes('<section id="school" hidden data-off>'), "the placeholder stays hidden");
+    assert.ok(!resume.includes("<h2>Education</h2>"));
+  }
+});

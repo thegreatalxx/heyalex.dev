@@ -266,9 +266,18 @@ const detailBody = p => `<h2>What it is</h2><p>${esc(p.what)}</p>${p.built ? `<p
   (p.next ? `<h2>What's next</h2><p>${esc(p.next)}</p>` : "") +
   (p.links && p.links.length ? `<h2>Links</h2><p>${p.links.map(l => `<a href="${esc(l[1])}">${esc(l[0])} ↗</a>`).join(" · ")}</p>` : "");
 const PGDATA = JSON.parse(HTML.match(/<script type="application\/json" id="pages-data">([\s\S]*?)<\/script>/)[1]);
+const RDATA = JSON.parse(HTML.match(/<script type="application\/json" id="resume-data">([\s\S]*?)<\/script>/)[1]);
+// school: the home page's School section and the résumé's Education part both come from resume-data's
+// "education" block. until it has one, the home page keeps its hidden placeholder.
+const EDU = RDATA.education && (RDATA.education.level || RDATA.education.where) ? RDATA.education : null;
+const eduName = e => [e.level, e.where].filter(Boolean).join(", ");
+const eduLine = e => esc(eduName(e)) + (e.years ? ` · ${esc(e.years)}` : "");
+const SCHOOL = EDU && `<section id="school">\n<h2>School</h2>\n<p>${eduLine(EDU)}</p>\n` +
+  (EDU.items && EDU.items.length ? `<dl class="pairs" style="margin-top:14px">${EDU.items.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>\n` : "") + `</section>`;
 // replacements are functions so a "$&", "$`" or "$'" in the data can never splice other parts of the page in
 const HOME = HTML.replace('<ul class="list" id="proj"></ul>', () => `<ul class="list" id="proj">${LIST}</ul>`)
-  .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}</ul>`);
+  .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}</ul>`)
+  .replace(/<section id="school" hidden data-off>[\s\S]*?<\/section>/, m => SCHOOL || m);
 function PGLIST() { return PGDATA.map(p => `<li><div class="row"><a class="n" href="/${esc(p.id)}" data-page>${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.tag)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join(""); }
 function projectHTML(pr) {
   const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · Alexander Wondwossen`;
@@ -313,17 +322,18 @@ function pageHTML(pg) {
 
 // résumé mode: one fast page for people hiring, built from the same data as the site (the resume-data block
 // and the project list in index.html), so it never drifts from what the home page says
-const RDATA = JSON.parse(HTML.match(/<script type="application\/json" id="resume-data">([\s\S]*?)<\/script>/)[1]);
 const RESUME_CSS = ':root{--bg:#07080e;--fg:#ecebe6;--dim:#8a8a96;--line:#22232c;--accent:#7dff9a;color-scheme:dark}*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--fg);font:14px/1.7 "JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace}main{max-width:720px;margin:0 auto;padding:56px 20px 64px}h1{font-size:22px;font-weight:500;margin:0}h2{font-size:14px;font-weight:500;margin:36px 0 10px}h2:before{content:"## ";color:var(--dim)}h3{font-size:14px;font-weight:500;margin:0;display:flex;gap:10px;align-items:baseline}h3 span{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-4px)}h3 small{color:var(--dim);font-size:14px}p{margin:0}.dim,.role{color:var(--dim)}.open{margin-top:14px;display:inline-flex;gap:10px;align-items:center;border:1px solid var(--line);padding:4px 10px}.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}.lead{margin-top:18px;max-width:62ch}dl{display:grid;grid-template-columns:12ch minmax(0,1fr);gap:4px 16px;margin:24px 0 0}dt{color:var(--dim)}dd{margin:0}article{padding:10px 0;border-bottom:1px dashed var(--line)}article p{margin-top:2px}a{color:inherit;text-decoration:none;border-bottom:1px solid #3a3b48}a:hover{border-color:var(--fg)}:focus-visible{outline:1px solid var(--fg);outline-offset:3px}footer{margin-top:40px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;color:var(--dim)}button{font:inherit;color:var(--dim);background:none;border:1px solid #3a3b48;padding:4px 10px;cursor:pointer}button:hover{color:var(--fg);border-color:var(--fg)}@media (max-width:560px){dl{grid-template-columns:minmax(0,1fr)}dt{margin-top:8px}}@media print{:root{--bg:#fff;--fg:#000;--dim:#444;--line:#bbb;--accent:#0a0}body{font-size:11px}main{padding:0}footer{display:none}a{border:0}.open{border-color:#bbb}}';
 function resumeHTML() {
   const r = RDATA, work = r.work.map(id => PDATA.find(p => p.id === id)).filter(Boolean);
   // the ventures from the business page, word for word
   const biz = PGDATA.find(g => g.id === "business");
   const also = biz ? `<h2>Also running</h2>${biz.sections.map(s => `<article><h3>${s.links && s.links[0] ? `<a href="${esc(s.links[0][1])}">${esc(s.h)}</a>` : esc(s.h)}</h3><p>${esc(s.p)}</p></article>`).join("")}` : "";
+  const edu = EDU ? `<h2>Education</h2><article><h3>${esc(eduName(EDU))}<span></span><small>${esc(EDU.years || "")}</small></h3>${(EDU.items || []).map(([k, v]) => `<p class="dim">${esc(k)}: ${esc(v)}</p>`).join("")}</article>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Résumé · ${esc(r.name)}</title><meta name="description" content="${esc(r.summary)}"><link rel="canonical" href="https://heyalex.dev/resume"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"><style>${RESUME_CSS}</style></head><body><main>` +
     `<h1>${esc(r.name)}</h1><p class="role">${esc(r.role)} · ${esc(r.place)}</p><p class="open"><span class="dot" aria-hidden="true"></span>${esc(r.looking)}</p>` +
     `<p class="lead">${esc(r.summary)}</p>` +
     `<dl>${r.facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}${r.links.map(([k, href, label]) => `<dt>${esc(k)}</dt><dd><a href="${esc(href)}">${esc(label)}</a></dd>`).join("")}</dl>` +
+    edu +
     `<h2>Selected work</h2>${work.map(p => `<article><h3><a href="/work/${esc(p.id)}">${esc(p.n)}</a><span></span><small>${esc(p.y)}</small></h3><p>${esc(p.d)}</p><p class="dim">${esc(p.stack)}${p.built ? ` · Built at the ${esc(p.built)}` : ""}</p></article>`).join("")}` +
     also +
     `<footer><a href="/">← The waterfront</a><button type="button" id="print">Save as PDF</button><span>${esc(r.replies)}</span></footer>` +
