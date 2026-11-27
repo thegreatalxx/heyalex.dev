@@ -1,0 +1,136 @@
+{
+  "description": "Things people in Toronto and the rest of Canada did fast, fastest first, each with a source.",
+  "intro": "Some things people in Toronto and the rest of Canada did fast, fastest first. After [patrickcollison.com/fast](https://patrickcollison.com/fast) and [tetraslam.com/fast](https://www.tetraslam.com/fast).",
+  "list": [
+    {
+      "n": "The 100 metres",
+      "took": "9.84 seconds",
+      "p": "On July 27 1996, at the Olympics in Atlanta, Donovan Bailey ran 100 metres in 9.84 seconds for Canada. It was a new world record.",
+      "src": [["Olympics.com", "https://www.olympics.com/en/news/atlanta-1996-defining-moments-magnificent-seven-donovan-bailey"]]
+    },
+    {
+      "n": "Pebble Time",
+      "took": "49 minutes",
+      "p": "On February 24 2015, Waterloo engineering grad Eric Migicovsky put his company's new smartwatch on Kickstarter. It raised $1 million in 49 minutes and $10 million in two days, and finished with $20.3 million from 78,741 backers, a Kickstarter record. He built his first smartwatch prototype as a student, from spare phone parts.",
+      "src": [["Waterloo News", "https://uwaterloo.ca/news/eng-kickstarter-king-has-pebble-time-his-hands"]]
+    },
+    {
+      "n": "AlexNet",
+      "took": "6 days",
+      "p": "In 2012, University of Toronto grad students Alex Krizhevsky and Ilya Sutskever and their advisor Geoffrey Hinton built a neural network that recognizes what's in a photo. Krizhevsky trained it on two gaming graphics cards in his bedroom at his parents' house, and each full training run took five to six days. It won that year's ImageNet competition, and almost every computer vision paper after it used neural networks. That December, after an auction run over email from a hotel at Lake Tahoe, Google agreed to buy the three-person company they had formed for $44 million.",
+      "src": [["Computer History Museum", "https://computerhistory.org/blog/chm-releases-alexnet-source-code/"], ["the paper", "https://proceedings.neurips.cc/paper_files/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html"], ["Wired", "https://www.wired.com/story/secret-auction-race-ai-supremacy-google-microsoft-baidu/"]]
+    },
+    {
+      "n": "The SARS genome",
+      "took": "6 days",
+      "p": "In April 2003, during Toronto's SARS outbreak, genetic material from a virus sample taken from a Toronto patient reached the Genome Sciences Centre in Vancouver at 1 a.m. on April 7. Its team read all 29,751 letters of the virus's genome in six days. It was the first SARS genome completed anywhere.",
+      "src": [["New Scientist", "https://www.newscientist.com/article/1915227-genetic-sequence-of-sars-virus-revealed/"], ["Linux Journal", "https://www.linuxjournal.com/article/6977"], ["the paper", "https://pubmed.ncbi.nlm.nih.gov/12730501/"]]
+    },
+    {
+      "n": "Basketball",
+      "took": "2 weeks",
+      "p": "In December 1891, at the YMCA training school in Springfield, Massachusetts, James Naismith, who grew up in Almonte, Ontario, was given a couple of weeks to invent an indoor game for a winter gym class. He wrote 13 rules, hung a peach basket at each end of the gym, and posted the rules on the wall on December 21.",
+      "src": [["FIBA", "https://www.fiba.basketball/en/news/naismith-audio-interview-discovered"], ["NBA.com", "https://www.nba.com/news/celebrating-125th-anniversary-basketball"], ["Springfield College", "https://springfield.edu/about/birthplace-of-basketball"]]
+    },
+    {
+      "n": "The COVID antibody",
+      "took": "90 days",
+      "p": "In 2020, AbCellera in Vancouver got a blood sample from one of the first Americans to recover from COVID-19. Within a week it had screened more than five million cells and found about 500 antibodies that bind the virus. Working with Eli Lilly, it took one of them, bamlanivimab, from first screen to its first human trial in 90 days. In November 2020 it became the first antibody made against the virus to get emergency use authorization in the U.S.",
+      "src": [["AbCellera", "https://investors.abcellera.com/news/news-releases/2021/Published-Peer-Reviewed-Data-Demonstrate-Bamlanivimabs-High-Potency-Against-SARS-CoV-2-and-Support-its-Use-as-a-Foundational-Antibody-Therapy-to-Treat-and-Prevent-COVID-19/default.aspx"]]
+    },
+    {
+      "n": "The Marathon of Hope",
+      "took": "143 days",
+      "p": "Terry Fox lost a leg to cancer at 18. On April 12 1980 he dipped his artificial leg in the Atlantic at St. John's and started running across Canada to raise money for cancer research, close to 42 kilometres a day. After 143 days and 5,373 kilometres the cancer came back in his lungs, and on September 1 he had to stop outside Thunder Bay.",
+      "src": [["Terry Fox Foundation", "https://terryfox.org/terrys-story/"]]
+    },
+    {
+      "n": "The electron microscope",
+      "took": "4 months",
+      "p": "In April 1938, University of Toronto grad students James Hillier and Albert Prebus showed their professor what they had built over the previous four months: North America's first working electron microscope. They machined its parts themselves and sealed it with rubber melted into Vaseline. It could magnify things 10,000 to 20,000 times. Ordinary microscopes top out around 2,000.",
+      "src": [["U of T Magazine", "https://magazine.utoronto.ca/campus/history/seeing-new-worlds-first-north-american-electron-microscope-james-hillier-albert-prebus-janet-rowe/"]]
+    },
+    {
+      "n": "Maple Leaf Gardens",
+      "took": "5½ months",
+      "p": "Construction started at midnight on June 1 1931, in the middle of the Depression, and the Leafs played the first game there on November 12. Part of the workers' pay was company stock, which gave them a reason to finish quickly. It was the biggest arena in the country.",
+      "src": [["Parks Canada", "https://www.pc.gc.ca/apps/dfhd/page_nhs_eng.aspx?id=11840"], ["Wikipedia", "https://en.wikipedia.org/wiki/Maple_Leaf_Gardens"]]
+    },
+    {
+      "n": "Insulin",
+      "took": "8 months",
+      "p": "On May 17 1921, Frederick Banting and a student, Charles Best, started experiments at the University of Toronto to pull a hormone out of the pancreas. On January 23 1922, at Toronto General Hospital, an extract purified by James Collip brought down the blood sugar of Leonard Thompson, a 14-year-old dying of diabetes. Banting and John Macleod won the Nobel Prize the next year, and the inventors sold their patents to the university for $1 each.",
+      "src": [["University of Toronto Libraries", "https://collections.library.utoronto.ca/repository/insulin"], ["a 2021 review", "https://pmc.ncbi.nlm.nih.gov/articles/PMC7773348/"], ["Diabetes UK", "https://www.diabetes.org.uk/our-research/about-our-research/our-impact/discovery-of-insulin"]]
+    },
+    {
+      "n": "FERUT and the Seaway",
+      "took": "8 months",
+      "p": "Before the St. Lawrence Seaway could be built, engineers had to work out how it would change water levels upriver. By hand, those calculations would have taken an estimated 20 person-years. In 1952 and 1953, Ontario Hydro ran them in about eight months on FERUT at the University of Toronto, the first electronic computer in Canada. They were the first big calculations done on any electronic computer in the country.",
+      "src": [["Canadian Journal of Civil Engineering", "https://cdnsciencepub.com/doi/abs/10.1139/l09-060"]]
+    },
+    {
+      "n": "SkyDome",
+      "took": "2 years 8 months",
+      "p": "Ground was broken in October 1986, and it opened on June 3 1989 with the first fully retractable motorized roof on any stadium. The roof still takes about 20 minutes to open or close. It's called the Rogers Centre now.",
+      "src": [["Toronto Star", "https://www.thestar.com/sports/blue-jays/watch-the-rogers-centre-be-built-in-two-and-a-half-minutes/article_3945ff4d-13a6-5dea-b2eb-743cbf934469.html"], ["MLB.com", "https://www.mlb.com/cut4/this-day-in-baseball-history-skydome-debuts-retractable-roof-during-blue-jays-ga"], ["Wikipedia", "https://en.wikipedia.org/wiki/Rogers_Centre"]]
+    },
+    {
+      "n": "The CN Tower",
+      "took": "40 months",
+      "p": "More than 1,500 workers built it in 40 months. Crews moved onto the railway lands by the lake on February 6 1973. In March 1975 a Sikorsky helicopter named Olga lifted the 39 pieces of the antenna into place, and the tower opened on June 26 1976. It was the world's tallest freestanding structure until 2009.",
+      "src": [["CN Tower", "https://www.cntower.ca/history"]]
+    },
+    {
+      "n": "Confederation Bridge",
+      "took": "3 years 7 months",
+      "p": "Work started in October 1993 on a 12.9-kilometre bridge across the Northumberland Strait, joining Prince Edward Island to New Brunswick. It opened on May 31 1997, and it is still the longest bridge in the world over ice-covered water.",
+      "src": [["Confederation Bridge", "https://confederationbridge.com/wp-content/uploads/2024/11/Media-Insert-October-2018.pdf"], ["VINCI", "https://www.vinci-construction-projets.com/en/realisations/confederation-bridge/"]]
+    },
+    {
+      "n": "The Montréal Métro",
+      "took": "4 years 5 months",
+      "p": "Construction started on May 23 1962. The first 20 stations opened on October 14 1966, and a million people rode it on its first weekend. Rock dug out of the tunnels went into Île Notre-Dame, an island built from scratch for Expo 67.",
+      "src": [["Tourisme Montréal", "https://www.mtl.org/en/experience/metro-anniversary"], ["Bloomberg", "https://www.bloomberg.com/news/articles/2013-10-14/montreal-s-tube-that-jean-built"], ["Wikipedia", "https://en.wikipedia.org/wiki/Montreal_Metro"]]
+    },
+    {
+      "n": "The Yonge subway",
+      "took": "4 years 7 months",
+      "p": "Digging started on September 8 1949, mostly by opening up Yonge Street and covering it back over. Canada's first subway, 7.4 kilometres from Union Station to Eglinton, opened on March 30 1954, and 250,000 people rode it on the first day.",
+      "src": [["TTC", "https://coupler.ttc.ca/news/back-track/back-track/60-years-yonge-a-yonge-subway-milestone"], ["The Canadian Encyclopedia", "https://thecanadianencyclopedia.ca/en/article/toronto-feature-canadas-first-subway"], ["TTC annual report", "https://cdn.ttc.ca/-/media/Project/TTC/TheCoupler/Documents/Annual-Reports/2004-Annual-Report.pdf?rev=ee6d3ba462944a60b04aff8ab561d6d4"]]
+    }
+  ],
+  "after": [
+    {
+      "p": "Not everything good is fast. The Prince Edward Viaduct over the Don Valley opened in 1918 with an empty deck under the road, for trains that didn't exist yet. The Bloor–Danforth subway finally ran across it in 1966, and having that deck already built saved the city a lot of money.",
+      "src": [["City of Toronto", "https://www.toronto.ca/explore-enjoy/history-art-culture/online-exhibits/web-exhibits/web-exhibits-architecture-infrastructure/bridging-the-don-the-prince-edward-viaduct/bridging-the-don-construction/"], ["Toronto Star", "https://www.thestar.com/news/gta/10-things-you-don-t-know-about-the-bloor-st-viaduct-as-it-turns-100/article_507f9dbe-ce80-567c-b6e1-644d07d12510.html"]]
+    }
+  ],
+  "mineIntro": "A few of my own, timed from my commit history.",
+  "mine": [
+    {
+      "n": "Echo Cave, two players",
+      "took": "27 minutes",
+      "p": "Echo Cave is a 3D sonar game in a single 2,710-byte link, made for SHRINK. Split-screen two-player mode went in 27 minutes after the first commit.",
+      "src": [["GitHub", "https://github.com/thegreatalxx/echo-cave"]]
+    },
+    {
+      "n": "The lake dive",
+      "took": "52 minutes",
+      "p": "This site's first commit went in at 8:16 p.m. on October 28 2026. Twelve commits and 52 minutes later, you could scroll down into the lake, and the water followed Toronto's real weather.",
+      "src": [["first commit", "https://github.com/thegreatalxx/heyalex.dev/commit/03800425d58e95b73205aafc580ef2ee9866f2c1"], ["twelfth commit", "https://github.com/thegreatalxx/heyalex.dev/commit/145c17335d9eaef5a7ef00edda48a6b5bf65d69d"]]
+    },
+    {
+      "n": "Conduit",
+      "took": "3 days",
+      "p": "A desk box for talking to my AI agents. I built it at the Wajo GSD hackathon from October 17 to 19 2026 and posted the launch on the last day.",
+      "src": [["launch post", "https://x.com/thealxlabs/status/2112234573170131254"], ["notes", "/work/conduit"]]
+    },
+    {
+      "n": "Kept",
+      "took": "19 days",
+      "p": "A private AI for one business, living on its own Mac. 121 commits in 19 days, starting November 4 2026. It's built, and it ships once I can pay for an Apple developer certificate.",
+      "src": [["notes", "/work/kept"]]
+    }
+  ],
+  "ask": "Know one I missed? [Email me](mailto:hi@heyalex.dev?subject=fast), with a source if you can."
+}

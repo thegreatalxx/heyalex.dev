@@ -9,10 +9,11 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 nodeModule.registerHooks({
   load(url, context, next) {
-    const asText = /\.(html|svg)$/.test(url), asData = /\.png$/.test(url), isWorker = url.endsWith("/src/worker.js");
-    if (!asText && !asData && !isWorker) return next(url, context);
+    const asText = /\.(html|svg)$/.test(url), asData = /\.png$/.test(url), asJson = /\.json$/.test(url), isWorker = url.endsWith("/src/worker.js");
+    if (!asText && !asData && !asJson && !isWorker) return next(url, context);
     const file = new URL(url);
     const source = isWorker ? readFileSync(file, "utf8")
+      : asJson ? "export default " + readFileSync(file, "utf8")
       : asText ? "export default " + JSON.stringify(readFileSync(file, "utf8"))
       : `export default new Uint8Array(${JSON.stringify([...readFileSync(file)])}).buffer`;
     return { format: "module", source, shortCircuit: true };
@@ -386,6 +387,33 @@ test("/resume: résumé mode is built from the site's own data, with a csp for i
   assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
   assert.equal((await call("/resume/")).status, 200);
   assert.ok((await (await call("/sitemap.xml")).text()).includes("<loc>https://heyalex.dev/resume</loc>"));
+});
+
+test("/fast: every entry is on the page with its sources, fastest first, all on one log scale", async () => {
+  const F = JSON.parse(readFileSync(new URL("../src/fast.json", import.meta.url), "utf8"));
+  const enc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const res = await call("/fast");
+  assert.equal(res.status, 200);
+  const body = await res.text(), csp = res.headers.get("content-security-policy");
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
+  assert.equal(scriptHashes(body).length, 0, "the page needs no script");
+  for (const e of [...F.list, ...F.mine]) {
+    assert.ok(body.includes(`>${enc(e.n)}</a>`) && body.includes(`<small>${enc(e.took)}</small>`), e.n);
+    for (const [, u] of e.src || []) assert.ok(body.includes(`href="${enc(u)}"`), `${e.n} links ${u}`);
+  }
+  for (const e of F.list) assert.ok(e.src.some(([, u]) => u.startsWith("https://")), `${e.n} has a source`);
+  // within each list the bars only ever grow, and the scale runs from one character to the full width
+  const lists = body.split("<ol").slice(1).map(l => [...l.split("</ol>")[0].matchAll(/--n:(\d+);--m:(\d+)/g)].map(m => [+m[1], +m[2]]));
+  assert.equal(lists.length, 2);
+  assert.equal(lists[0].length, F.list.length);
+  for (const bars of lists) for (let i = 1; i < bars.length; i++) assert.ok(bars[i][0] >= bars[i - 1][0] && bars[i][1] >= bars[i - 1][1], "fastest first");
+  const all = lists.flat();
+  assert.deepEqual([Math.min(...all.map(b => b[1])), Math.max(...all.map(b => b[1]))], [1, 60]);
+  assert.deepEqual([Math.min(...all.map(b => b[0])), Math.max(...all.map(b => b[0]))], [1, 32]);
+  assert.match(body, /<a href="mailto:hi@heyalex\.dev\?subject=fast">/, "the ask turns into a mail link");
+  assert.equal((await call("/fast/")).status, 200);
+  assert.ok((await (await call("/sitemap.xml")).text()).includes("<loc>https://heyalex.dev/fast</loc>"));
+  assert.ok((await (await call("/")).text()).includes('<a class="n" href="/fast">'), "linked from the home page");
 });
 
 test("/api/pets: one shared counter, one pet a second per visitor, batched into kv", async () => {

@@ -1,5 +1,6 @@
 // heyalex.dev: one worker serves the page, the live status api, and the link-preview media.
 import HTML from "./index.html";
+import FAST from "./fast.json";
 import FAVICON_SVG from "./icons/favicon.svg";
 import FAVICON_32 from "./icons/favicon-32.png";
 import TOUCH_ICON from "./icons/apple-touch-icon.png";
@@ -276,7 +277,7 @@ const SCHOOL = EDU && `<section id="school">\n<h2>School</h2>\n<p>${eduLine(EDU)
   (EDU.items && EDU.items.length ? `<dl class="pairs" style="margin-top:14px">${EDU.items.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>\n` : "") + `</section>`;
 // replacements are functions so a "$&", "$`" or "$'" in the data can never splice other parts of the page in
 const HOME = HTML.replace('<ul class="list" id="proj"></ul>', () => `<ul class="list" id="proj">${LIST}</ul>`)
-  .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}</ul>`)
+  .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}<li><div class="row"><a class="n" href="/fast">Fast</a><span class="lead"></span><span class="y">Toronto</span></div><p class="desc">Things people in Toronto and the rest of Canada did fast, with a bar for how long each one took.</p></li></ul>`)
   .replace(/<section id="school" hidden data-off>[\s\S]*?<\/section>/, m => SCHOOL || m);
 function PGLIST() { return PGDATA.map(p => `<li><div class="row"><a class="n" href="/${esc(p.id)}" data-page>${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.tag)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join(""); }
 function projectHTML(pr) {
@@ -341,6 +342,44 @@ function resumeHTML() {
 }
 const RESUME_HTML = resumeHTML();
 let RESUME_CSP_PROMISE;
+
+// /fast: things people in toronto and the rest of canada did fast, fastest first (after patrickcollison.com/fast).
+// the entries live in fast.json. each "took" is written in plain words ("5½ months", "4 years 7 months"), and the
+// bar under it is drawn from that on one log scale for the whole page, so any two bars can be compared.
+const UNITS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
+function took(s) {
+  const parts = [...String(s).matchAll(/(\d+(?:\.\d+)?)?(½)?\s*(second|minute|hour|day|week|month|year)s?\b/g)].filter(m => m[1] || m[2]);
+  if (!parts.length) throw new Error(`fast.json: "${s}" isn't a length of time like "6 days" or "4 years 7 months"`);
+  return parts.reduce((t, [, n, half, u]) => t + ((n ? parseFloat(n) : 0) + (half ? 0.5 : 0)) * UNITS[u], 0);
+}
+// [text](url) in fast.json becomes a link; everything else is escaped
+const inline = s => esc(s || "").replace(/\[([^\]]+)\]\(((?:https:\/\/|mailto:|\/)[^)\s]*)\)/g, (_, t, u) => `<a href="${u}">${t}</a>`);
+const slug = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const FAST_SECS = new Map([...FAST.list, ...(FAST.mine || [])].map(e => [e, took(e.took)]));
+const FAST_BY_TIME = [...FAST_SECS].sort((a, b) => a[1] - b[1]);
+const FAST_LO = Math.log(FAST_BY_TIME[0][1]), FAST_HI = Math.log(FAST_BY_TIME.at(-1)[1]);
+// how many characters of a `w`-wide bar an entry fills: the fastest thing on the page gets one, the slowest all of them
+const barFill = (s, w) => 1 + Math.round((w - 1) * (Math.log(s) - FAST_LO) / (FAST_HI - FAST_LO || 1));
+const sources = src => src && src.length ? `<p class="src">${src.length > 1 ? "Sources" : "Source"}: ${src.map(([t, u]) => `<a href="${esc(u)}">${esc(t)}</a>`).join(", ")}</p>` : "";
+// bars are 32 characters on phones and 60 on wider screens; the track is drawn in dots and the fill laid over it
+const fastList = (list, cls) => `<ol${cls ? ` class="${cls}"` : ""}>` + list.map((e, i) => [e, i])
+  .sort(([a, i], [b, j]) => FAST_SECS.get(a) - FAST_SECS.get(b) || i - j)
+  .map(([e]) => {
+    const id = slug(e.n), s = FAST_SECS.get(e);
+    return `<li id="${id}"><h3><a href="#${id}">${esc(e.n)}</a><span></span><small>${esc(e.took)}</small></h3>` +
+      `<p class="bar" aria-hidden="true">${"·".repeat(60)}<b style="--n:${barFill(s, 32)};--m:${barFill(s, 60)}">${"=".repeat(60)}</b></p>` +
+      `<p>${inline(e.p)}</p>${sources(e.src)}</li>`;
+  }).join("") + "</ol>";
+const FAST_CSS = ':root{--bg:#07080e;--fg:#ecebe6;--dim:#8a8a96;--line:#22232c;--bar:#7dff9a;--mine:#ffd060;color-scheme:dark}*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--fg);font:14px/1.7 "JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace}main{max-width:720px;margin:0 auto;padding:56px 20px 64px}h1{font-size:22px;font-weight:500;margin:0}h2{font-size:14px;font-weight:500;margin:52px 0 4px}h2:before{content:"## ";color:var(--dim)}p{margin:0}.lead{margin-top:14px;max-width:62ch}.dim{color:var(--dim)}.key{margin-top:8px}ol{list-style:none;margin:24px 0 0;padding:0;border-top:1px dashed var(--line)}li{padding:18px 0 16px;border-bottom:1px dashed var(--line);scroll-margin-top:24px}h3{font-size:14px;font-weight:500;margin:0;display:flex;gap:10px;align-items:baseline}h3 span{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-4px)}h3 small{color:var(--dim);font-size:14px;white-space:nowrap}h3 a{border:0}h3 a:hover,li:target h3 a{color:var(--bar)}.bar{position:relative;width:32ch;overflow:hidden;white-space:pre;margin:2px 0 8px;line-height:1.4;color:#2c2f3d;user-select:none}.bar b{position:absolute;left:0;top:0;width:calc(var(--n)*1ch);overflow:hidden;font-weight:400;color:var(--bar);background:var(--bg)}.mine .bar b{color:var(--mine)}.mine li:target h3 a,.mine h3 a:hover{color:var(--mine)}.src{margin-top:6px;color:var(--dim)}.after{margin-top:28px;max-width:66ch}.ask{margin-top:36px}a{color:inherit;text-decoration:none;border-bottom:1px solid #3a3b48}a:hover{border-color:var(--fg)}:focus-visible{outline:1px solid var(--fg);outline-offset:3px}footer{margin-top:40px;display:flex;gap:18px;flex-wrap:wrap;color:var(--dim)}@keyframes grow{from{width:0}}@media (min-width:640px){.bar{width:60ch}.bar b{width:calc(var(--m)*1ch)}}@media (prefers-reduced-motion:no-preference){@supports (animation-timeline:view()){.bar b{animation:grow linear both;animation-timing-function:steps(var(--n),end);animation-timeline:view();animation-range:entry 10% cover 35%}@media (min-width:640px){.bar b{animation-timing-function:steps(var(--m),end)}}}}@media print{:root{--bg:#fff;--fg:#000;--dim:#444;--line:#bbb;--bar:#000;--mine:#000}body{font-size:11px}main{padding:0}footer{display:none}a{border:0}.bar{color:#ccc}}';
+const FAST_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>fast · ${esc(RDATA.name)}</title><meta name="description" content="${esc(FAST.description)}"><link rel="canonical" href="https://heyalex.dev/fast"><meta property="og:type" content="website"><meta property="og:url" content="https://heyalex.dev/fast"><meta property="og:title" content="fast"><meta property="og:description" content="${esc(FAST.description)}"><meta property="og:image" content="https://heyalex.dev/og.jpg"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"><style>${FAST_CSS}</style></head><body><main>` +
+  `<h1>fast</h1><p class="lead">${inline(FAST.intro)}</p>` +
+  `<p class="dim key">The bars use a log scale, so ${esc(FAST_BY_TIME[0][0].took)} and ${esc(FAST_BY_TIME.at(-1)[0].took)} fit on the same line.</p>` +
+  fastList(FAST.list) +
+  (FAST.after || []).map(a => `<div class="after"><p>${inline(a.p)}</p>${sources(a.src)}</div>`).join("") +
+  (FAST.mine && FAST.mine.length ? `<h2>And mine</h2><p class="dim">${inline(FAST.mineIntro)}</p>${fastList(FAST.mine, "mine")}` : "") +
+  (FAST.ask ? `<p class="ask">${inline(FAST.ask)}</p>` : "") +
+  `<footer><a href="/">← The waterfront</a><a href="/resume">Résumé</a></footer></main></body></html>`;
+let FAST_CSP_PROMISE;
 
 // the cats' pet counter is shared by everyone. kv takes few writes, so each isolate batches pets in memory and
 // writes them at most every five minutes (or every 50 pets); a visitor adds at most one pet a second.
@@ -513,12 +552,14 @@ export default {
       return new Response(m === "HEAD" ? null : HOME, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/resume" || p === "/resume/")
       return new Response(m === "HEAD" ? null : RESUME_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await (RESUME_CSP_PROMISE ||= cspFor(RESUME_HTML)), ...SEC } });
+    if (p === "/fast" || p === "/fast/")
+      return new Response(m === "HEAD" ? null : FAST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await (FAST_CSP_PROMISE ||= cspFor(FAST_HTML)), ...SEC } });
     const wk = /^\/work\/([a-z0-9-]+)\/?$/.exec(p), pr = wk && PROJECTS.find(x => x.id === wk[1]);
     if (pr) return new Response(m === "HEAD" ? null : projectHTML(pr), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     const pgm = /^\/([a-z-]+)\/?$/.exec(p), pgd = pgm && PGDATA.find(x => x.id === pgm[1]);
     if (pgd) return new Response(m === "HEAD" ? null : pageHTML(pgd), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
-    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url><url><loc>https://heyalex.dev/resume</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
+    if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url><url><loc>https://heyalex.dev/resume</loc></url><url><loc>https://heyalex.dev/fast</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(m === "HEAD" ? null : NOT_FOUND, { status: 404, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300", "content-security-policy": NOT_FOUND_CSP, ...SEC } });
   },
