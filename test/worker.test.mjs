@@ -416,6 +416,18 @@ test("/fast: every entry is on the page with its sources, fastest first, all on 
   assert.ok((await (await call("/")).text()).includes('<a class="n" href="/fast">'), "linked from the home page");
 });
 
+test("/llms.txt: the site as markdown, from the same data as the résumé, without school", async () => {
+  const res = await call("/llms.txt");
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /^text\/markdown/);
+  const body = await res.text();
+  assert.match(body, /^# Alexander Wondwossen\n\n> /, "h1 then a blockquote summary, per llmstxt.org");
+  for (const h of ["## Work", "## Pages", "## Contact", "## Optional"]) assert.ok(body.includes(h), h);
+  assert.ok(body.includes("(https://heyalex.dev/work/kept)"), "every project links to its page");
+  assert.ok(body.includes("(https://heyalex.dev/resume)"));
+  assert.doesNotMatch(body, /Grade|graduating/, "school stays out");
+});
+
 test("/api/pets: one shared counter, one pet a second per visitor, batched into kv", async () => {
   const pet = ip => call("/api/pets", { method: "POST", headers: { "cf-connecting-ip": ip } });
   const before = (await (await call("/api/pets")).json()).count;

@@ -279,6 +279,29 @@ const SCHOOL = EDU && `<section id="school">\n<h2>School</h2>\n<p>${eduLine(EDU)
 const HOME = HTML.replace('<ul class="list" id="proj"></ul>', () => `<ul class="list" id="proj">${LIST}</ul>`)
   .replace('<ul class="list" id="pages"></ul>', () => `<ul class="list" id="pages">${PGLIST()}<li><div class="row"><a class="n" href="/fast">Fast</a><span class="lead"></span><span class="y">Toronto</span></div><p class="desc">Things people in Toronto and the rest of Canada did fast, with a bar for how long each one took.</p></li></ul>`)
   .replace(/<section id="school" hidden data-off>[\s\S]*?<\/section>/, m => SCHOOL || m);
+// llms.txt (llmstxt.org): the site in plain markdown for language models, built from the same data blocks as the
+// résumé so it never drifts. school stays out on purpose.
+const LLMS = (() => {
+  const r = RDATA, site = "https://heyalex.dev";
+  const work = PDATA.map(p => `- [${p.n}](${site}/work/${p.id}): ${p.d} (${p.y}; ${p.stack})` +
+    (p.links && p.links.length ? ` Links: ${p.links.map(l => `[${l[0]}](${l[1]})`).join(", ")}.` : ""));
+  return [
+    `# ${r.name}`, "",
+    `> ${r.role}. Based in ${r.place}. ${r.looking}.`, "",
+    r.summary, "",
+    ...r.facts.map(([k, v]) => `- ${k}: ${v}`), "",
+    "## Work", "", ...work, "",
+    "## Pages", "",
+    `- [Résumé](${site}/resume): one printable page for people hiring`,
+    ...PGDATA.map(g => `- [${g.n}](${site}/${g.id}): ${g.d}`),
+    `- [Fast](${site}/fast): things people in Toronto and the rest of Canada did fast`, "",
+    "## Contact", "",
+    ...r.links.map(([k, href, label]) => `- ${k}: [${label}](${href})`), "",
+    "## Optional", "",
+    `- [ascii-glaze](https://github.com/thegreatalxx/heyalex.dev/tree/main/packages/ascii-glaze): the MIT library that draws the site's ASCII skyline`,
+    "",
+  ].join("\n");
+})();
 function PGLIST() { return PGDATA.map(p => `<li><div class="row"><a class="n" href="/${esc(p.id)}" data-page>${esc(p.n)}</a><span class="lead"></span><span class="y">${esc(p.tag)}</span></div><p class="desc">${esc(p.d)}</p></li>`).join(""); }
 function projectHTML(pr) {
   const p = PDATA.find(x => x.id === pr.id), url = "https://heyalex.dev/work/" + pr.id, title = `${pr.name} · Alexander Wondwossen`;
@@ -559,6 +582,7 @@ export default {
     const pgm = /^\/([a-z-]+)\/?$/.exec(p), pgd = pgm && PGDATA.find(x => x.id === pgm[1]);
     if (pgd) return new Response(m === "HEAD" ? null : pageHTML(pgd), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "content-security-policy": await csp(), ...SEC } });
     if (p === "/robots.txt") return new Response("User-agent: *\nAllow: /\nSitemap: https://heyalex.dev/sitemap.xml\n", { headers: { "content-type": "text/plain" } });
+    if (p === "/llms.txt") return new Response(LLMS, { headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=3600" } });
     if (p === "/sitemap.xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://heyalex.dev/</loc></url><url><loc>https://heyalex.dev/resume</loc></url><url><loc>https://heyalex.dev/fast</loc></url>' + PROJECTS.map(x => `<url><loc>https://heyalex.dev/work/${x.id}</loc></url>`).join("") + PGDATA.map(x => `<url><loc>https://heyalex.dev/${x.id}</loc></url>`).join("") + '</urlset>', { headers: { "content-type": "application/xml" } });
     if (p === "/.well-known/security.txt") return new Response("Contact: mailto:hi@heyalex.dev\nExpires: 2027-10-28T00:00:00Z\n", { headers: { "content-type": "text/plain" } });
     return new Response(m === "HEAD" ? null : NOT_FOUND, { status: 404, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex", "cache-control": "public, max-age=300", "content-security-policy": NOT_FOUND_CSP, ...SEC } });

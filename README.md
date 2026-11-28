@@ -14,6 +14,7 @@ one cloudflare worker serves everything:
   - github: repos i pushed to in the last 30 days and my recent commit subject lines. when it rains, the rain is those words; the labelled fish in the lake dive are those repos
 - `/resume` résumé mode: one fast, printable page for people hiring, built from the `resume-data` block and the project list in `src/index.html`
 - `/fast` things people in toronto and the rest of canada did fast, fastest first, from `src/fast.json` (see below)
+- `/llms.txt` the site as markdown for language models (llmstxt.org), built from the same data blocks as `/resume`. school is left out on purpose
 - `/api/pets` the cats' shared pet counter (kv key `pets`, batched so kv sees a write every few minutes at most)
 - `/api/photos`, `/photo/<id>.jpg` the photo contact sheet (see below)
 - `/api/push` last push; `/api/game` the old games endpoint, kept for cached pages
